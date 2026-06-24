@@ -155,6 +155,39 @@ final class HomebrewCaskDetectorTests: XCTestCase {
         XCTAssertEqual(source, .homebrewCask(token: "visual-studio-code"))
     }
 
+    func testProcessCommandRunnerDrainsLargeStdoutWhileProcessWritesStderr() throws {
+        let runner = ProcessCommandRunner(searchDirectories: shellSearchDirectories)
+
+        let output = try runner.run("sh", arguments: [
+            "-c",
+            """
+            i=0
+            while [ "$i" -lt 20000 ]; do
+              printf 'PIPE_STDOUT_MARKER_%05d\\n' "$i"
+              i=$((i + 1))
+            done
+            printf 'PIPE_STDERR_MARKER\\n' >&2
+            """
+        ])
+
+        XCTAssertTrue(output.contains("PIPE_STDOUT_MARKER_00000"))
+        XCTAssertTrue(output.contains("PIPE_STDOUT_MARKER_19999"))
+    }
+
+    func testProcessCommandRunnerCapturesStderrWhenCommandFails() throws {
+        let runner = ProcessCommandRunner(searchDirectories: shellSearchDirectories)
+
+        XCTAssertThrowsError(try runner.run("sh", arguments: [
+            "-c",
+            "printf 'PIPE_FAILURE_STDERR_MARKER\\n' >&2; exit 7"
+        ])) { error in
+            XCTAssertEqual(
+                error as? CommandError,
+                .failed(status: 7, stderr: "PIPE_FAILURE_STDERR_MARKER\n")
+            )
+        }
+    }
+
     private func makeAppRecord(path: URL) -> AppRecord {
         AppRecord(
             id: "com.microsoft.VSCode",
@@ -165,6 +198,13 @@ final class HomebrewCaskDetectorTests: XCTestCase {
             path: path,
             sizeBytes: 0
         )
+    }
+
+    private var shellSearchDirectories: [URL] {
+        [
+            URL(fileURLWithPath: "/bin", isDirectory: true),
+            URL(fileURLWithPath: "/usr/bin", isDirectory: true),
+        ]
     }
 }
 
