@@ -31,10 +31,27 @@ public struct ProcessCommandRunner: CommandRunning {
         process.standardError = stderrPipe
 
         try process.run()
-        process.waitUntilExit()
+        let readGroup = DispatchGroup()
+        var stdoutData = Data()
+        var stderrData = Data()
 
-        let stdout = String(data: stdoutPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
-        let stderr = String(data: stderrPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+        readGroup.enter()
+        DispatchQueue.global(qos: .utility).async {
+            stdoutData = stdoutPipe.fileHandleForReading.readDataToEndOfFile()
+            readGroup.leave()
+        }
+
+        readGroup.enter()
+        DispatchQueue.global(qos: .utility).async {
+            stderrData = stderrPipe.fileHandleForReading.readDataToEndOfFile()
+            readGroup.leave()
+        }
+
+        process.waitUntilExit()
+        readGroup.wait()
+
+        let stdout = String(data: stdoutData, encoding: .utf8) ?? ""
+        let stderr = String(data: stderrData, encoding: .utf8) ?? ""
 
         guard process.terminationStatus == 0 else {
             throw CommandError.failed(status: process.terminationStatus, stderr: stderr)
