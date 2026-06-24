@@ -20,9 +20,9 @@ final class HomebrewCaskDetectorTests: XCTestCase {
         }
         """)
         let detector = HomebrewCaskDetector(commandRunner: runner)
-        let appURL = URL(fileURLWithPath: "/Applications/Visual Studio Code.app")
+        let app = makeAppRecord(path: URL(fileURLWithPath: "/Applications/Visual Studio Code.app"))
 
-        let source = try detector.detectInstallSource(for: appURL)
+        let source = try detector.detectInstallSource(for: app)
 
         XCTAssertEqual(source, .homebrewCask(token: "visual-studio-code"))
         XCTAssertEqual(runner.calls, [
@@ -33,11 +33,23 @@ final class HomebrewCaskDetectorTests: XCTestCase {
     func testReturnsNilWhenBrewIsUnavailable() throws {
         let runner = StubCommandRunner(error: CommandError.executableNotFound("brew"))
         let detector = HomebrewCaskDetector(commandRunner: runner)
-        let appURL = URL(fileURLWithPath: "/Applications/Visual Studio Code.app")
+        let app = makeAppRecord(path: URL(fileURLWithPath: "/Applications/Visual Studio Code.app"))
 
-        let source = try detector.detectInstallSource(for: appURL)
+        let source = try detector.detectInstallSource(for: app)
 
         XCTAssertNil(source)
+    }
+
+    private func makeAppRecord(path: URL) -> AppRecord {
+        AppRecord(
+            id: "com.microsoft.VSCode",
+            name: "Visual Studio Code",
+            bundleIdentifier: "com.microsoft.VSCode",
+            shortVersion: nil,
+            buildVersion: nil,
+            path: path,
+            sizeBytes: 0
+        )
     }
 }
 

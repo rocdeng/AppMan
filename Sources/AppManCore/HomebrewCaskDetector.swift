@@ -7,7 +7,7 @@ public struct HomebrewCaskDetector: Sendable {
         self.commandRunner = commandRunner
     }
 
-    public func detectInstallSource(for appURL: URL) throws -> InstallSource? {
+    public func detectInstallSource(for app: AppRecord) throws -> InstallSource? {
         let output: String
         do {
             output = try commandRunner.run("brew", arguments: ["info", "--cask", "--json=v2"])
@@ -17,7 +17,7 @@ public struct HomebrewCaskDetector: Sendable {
 
         let data = Data(output.utf8)
         let response = try JSONDecoder().decode(BrewInfoResponse.self, from: data)
-        let appName = appURL.lastPathComponent
+        let appName = app.path.lastPathComponent
 
         for cask in response.casks {
             for artifact in cask.artifacts {
