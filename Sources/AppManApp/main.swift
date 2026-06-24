@@ -1,1 +1,0 @@
-print("AppMan scanner foundation")
