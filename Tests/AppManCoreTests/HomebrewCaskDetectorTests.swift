@@ -155,6 +155,41 @@ final class HomebrewCaskDetectorTests: XCTestCase {
         XCTAssertEqual(source, .homebrewCask(token: "visual-studio-code"))
     }
 
+    func testReturnsFirstTokenWhenMultipleCasksDeclareSameAppName() throws {
+        let runner = StubCommandRunner(output: """
+        {
+          "casks": [
+            {
+              "token": "first-shared",
+              "artifacts": [
+                {
+                  "app": [
+                    "Shared.app"
+                  ]
+                }
+              ]
+            },
+            {
+              "token": "second-shared",
+              "artifacts": [
+                {
+                  "app": [
+                    "Shared.app"
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+        """)
+        let detector = HomebrewCaskDetector(commandRunner: runner)
+        let app = makeAppRecord(path: URL(fileURLWithPath: "/Applications/Shared.app"))
+
+        let source = try detector.detectInstallSource(for: app)
+
+        XCTAssertEqual(source, .homebrewCask(token: "first-shared"))
+    }
+
     func testCachesBrewInfoForMultipleDetectionsOnSameDetector() throws {
         let runner = CountingCommandRunner(output: """
         {

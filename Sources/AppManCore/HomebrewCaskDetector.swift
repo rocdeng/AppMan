@@ -44,7 +44,9 @@ public struct HomebrewCaskDetector: HomebrewDetecting {
         for cask in response.casks {
             for artifact in cask.artifacts {
                 for appName in artifact.appNames {
-                    appTokens[appName] = cask.token
+                    if appTokens[appName] == nil {
+                        appTokens[appName] = cask.token
+                    }
                 }
             }
         }
