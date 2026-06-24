@@ -1,4 +1,5 @@
 import AppManCore
+import AppKit
 import SwiftUI
 
 @main
@@ -15,6 +16,9 @@ struct AppManApp: App {
                 exit(1)
             }
         }
+
+        NSApplication.shared.setActivationPolicy(.regular)
+        NSApplication.shared.activate(ignoringOtherApps: true)
     }
 
     var body: some Scene {
