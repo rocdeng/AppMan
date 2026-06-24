@@ -20,10 +20,31 @@ final class AppScannerTests: XCTestCase {
         let scanner = AppScanner(scanRoots: [appsDirectory])
         let records = try scanner.scanInstalledApps()
 
-        XCTAssertEqual(records.map(\.name).sorted(), ["Alpha", "Beta"])
-        XCTAssertEqual(records.map(\.bundleIdentifier).compactMap { $0 }.sorted(), [
+        XCTAssertEqual(records.map(\.name), ["Alpha", "Beta"])
+        XCTAssertEqual(records.map(\.bundleIdentifier), [
             "com.example.alpha",
             "com.example.beta",
+        ])
+    }
+
+    func testSortsNameTiesByBundleIdentifier() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let zuluRoot = root.appendingPathComponent("ZuluRoot", isDirectory: true)
+        let alphaRoot = root.appendingPathComponent("AlphaRoot", isDirectory: true)
+        try FileManager.default.createDirectory(at: zuluRoot, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: alphaRoot, withIntermediateDirectories: true)
+        try createApp(named: "Zulu.app", displayName: "Same", bundleID: "com.example.zulu", in: zuluRoot)
+        try createApp(named: "Alpha.app", displayName: "same", bundleID: "com.example.alpha", in: alphaRoot)
+
+        let scanner = AppScanner(scanRoots: [zuluRoot, alphaRoot])
+        let records = try scanner.scanInstalledApps()
+
+        XCTAssertEqual(records.map(\.bundleIdentifier), [
+            "com.example.alpha",
+            "com.example.zulu",
         ])
     }
 
@@ -37,18 +58,41 @@ final class AppScannerTests: XCTestCase {
         XCTAssertEqual(records, [])
     }
 
+    func testInvalidAppBundleIsSkipped() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(
+            at: root.appendingPathComponent("Broken.app", isDirectory: true),
+            withIntermediateDirectories: true
+        )
+        try createApp(named: "Valid.app", bundleID: "com.example.valid", in: root)
+
+        let scanner = AppScanner(scanRoots: [root])
+        let records = try scanner.scanInstalledApps()
+
+        XCTAssertEqual(records.map(\.bundleIdentifier), ["com.example.valid"])
+    }
+
     private func createApp(named name: String, bundleID: String, in directory: URL) throws {
+        try createApp(named: name, displayName: nil, bundleID: bundleID, in: directory)
+    }
+
+    private func createApp(named name: String, displayName: String?, bundleID: String, in directory: URL) throws {
         let appURL = directory.appendingPathComponent(name, isDirectory: true)
         let contentsURL = appURL.appendingPathComponent("Contents", isDirectory: true)
         try FileManager.default.createDirectory(at: contentsURL, withIntermediateDirectories: true)
         let appName = appURL.deletingPathExtension().lastPathComponent
+        let nameKey = displayName == nil ? "CFBundleName" : "CFBundleDisplayName"
         let plist = """
         <?xml version="1.0" encoding="UTF-8"?>
         <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
         <plist version="1.0">
         <dict>
-            <key>CFBundleName</key>
-            <string>\(appName)</string>
+            <key>\(nameKey)</key>
+            <string>\(displayName ?? appName)</string>
             <key>CFBundleIdentifier</key>
             <string>\(bundleID)</string>
         </dict>

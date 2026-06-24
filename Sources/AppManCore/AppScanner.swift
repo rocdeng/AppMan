@@ -41,7 +41,19 @@ public struct AppScanner: @unchecked Sendable {
         }
 
         return records.sorted { left, right in
-            left.name.localizedCaseInsensitiveCompare(right.name) == .orderedAscending
+            let nameOrder = left.name.localizedCaseInsensitiveCompare(right.name)
+            if nameOrder != .orderedSame {
+                return nameOrder == .orderedAscending
+            }
+
+            let leftTieBreaker = left.bundleIdentifier ?? left.path.path
+            let rightTieBreaker = right.bundleIdentifier ?? right.path.path
+            let tieBreakerOrder = leftTieBreaker.localizedCaseInsensitiveCompare(rightTieBreaker)
+            if tieBreakerOrder != .orderedSame {
+                return tieBreakerOrder == .orderedAscending
+            }
+
+            return left.path.path.localizedCaseInsensitiveCompare(right.path.path) == .orderedAscending
         }
     }
 
