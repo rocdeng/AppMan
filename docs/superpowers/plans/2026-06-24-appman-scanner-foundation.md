@@ -47,6 +47,7 @@ This plan covers acceptance criteria 1 and the foundation of criterion 2 from th
 **Files:**
 - Create: `Package.swift`
 - Create: `Sources/AppManCore/AppRecord.swift`
+- Create: `Sources/AppManApp/main.swift`
 - Create: `Tests/AppManCoreTests/AppRecordTests.swift`
 - Create: `Tests/AppManCoreTests/Fixtures/.gitkeep`
 
@@ -153,7 +154,15 @@ public enum InstallSource: Equatable, Sendable {
 }
 ```
 
-- [ ] **Step 4: Add a model test**
+- [ ] **Step 4: Add a temporary app executable entry**
+
+Create `Sources/AppManApp/main.swift` so SwiftPM can resolve the executable target before the SwiftUI app shell is introduced:
+
+```swift
+print("AppMan scanner foundation")
+```
+
+- [ ] **Step 5: Add a model test**
 
 Create `Tests/AppManCoreTests/AppRecordTests.swift`:
 
@@ -174,7 +183,7 @@ final class AppRecordTests: XCTestCase {
 }
 ```
 
-- [ ] **Step 5: Run tests**
+- [ ] **Step 6: Run tests**
 
 Run:
 
@@ -184,10 +193,10 @@ swift test
 
 Expected: tests pass.
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 7: Commit**
 
 ```bash
-git add Package.swift Sources/AppManCore/AppRecord.swift Tests/AppManCoreTests/AppRecordTests.swift Tests/AppManCoreTests/Fixtures/.gitkeep
+git add Package.swift Sources/AppManCore/AppRecord.swift Sources/AppManApp/main.swift Tests/AppManCoreTests/AppRecordTests.swift Tests/AppManCoreTests/Fixtures/.gitkeep
 git commit -m "Add Swift package foundation"
 ```
 
@@ -1044,6 +1053,7 @@ git commit -m "Add install source resolver"
 ## Task 6: Build SwiftUI App Shell
 
 **Files:**
+- Delete: `Sources/AppManApp/main.swift`
 - Create: `Sources/AppManApp/AppManApp.swift`
 - Create: `Sources/AppManApp/AppListView.swift`
 - Create: `Sources/AppManApp/AppListViewModel.swift`
@@ -1190,6 +1200,12 @@ private struct AppDetailView: View {
 ```
 
 - [ ] **Step 3: Add app entry point**
+
+Remove the temporary executable entry:
+
+```bash
+rm Sources/AppManApp/main.swift
+```
 
 Create `Sources/AppManApp/AppManApp.swift`:
 
