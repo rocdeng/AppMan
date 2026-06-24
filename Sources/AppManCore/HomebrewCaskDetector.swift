@@ -1,6 +1,10 @@
 import Foundation
 
-public struct HomebrewCaskDetector: Sendable {
+public protocol HomebrewDetecting: Sendable {
+    func detectInstallSource(for app: AppRecord) throws -> InstallSource?
+}
+
+public struct HomebrewCaskDetector: HomebrewDetecting {
     private let commandRunner: any CommandRunning
 
     public init(commandRunner: any CommandRunning = ProcessCommandRunner()) {
