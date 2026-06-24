@@ -155,6 +155,35 @@ final class HomebrewCaskDetectorTests: XCTestCase {
         XCTAssertEqual(source, .homebrewCask(token: "visual-studio-code"))
     }
 
+    func testCachesBrewInfoForMultipleDetectionsOnSameDetector() throws {
+        let runner = CountingCommandRunner(output: """
+        {
+          "casks": [
+            {
+              "token": "firefox",
+              "artifacts": [
+                {
+                  "app": [
+                    "Firefox.app"
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+        """)
+        let detector = HomebrewCaskDetector(commandRunner: runner)
+        let firefox = makeAppRecord(path: URL(fileURLWithPath: "/Applications/Firefox.app"))
+        let safari = makeAppRecord(path: URL(fileURLWithPath: "/Applications/Safari.app"))
+
+        let firefoxSource = try detector.detectInstallSource(for: firefox)
+        let safariSource = try detector.detectInstallSource(for: safari)
+
+        XCTAssertEqual(firefoxSource, .homebrewCask(token: "firefox"))
+        XCTAssertNil(safariSource)
+        XCTAssertEqual(runner.runCallCount, 1)
+    }
+
     func testProcessCommandRunnerDrainsLargeStdoutWhileProcessWritesStderr() throws {
         let runner = ProcessCommandRunner(searchDirectories: shellSearchDirectories)
 
@@ -232,6 +261,22 @@ private struct StubCommandRunner: CommandRunning {
         if let error {
             throw error
         }
+        return output
+    }
+}
+
+private final class CountingCommandRunner: CommandRunning, @unchecked Sendable {
+    private let output: String
+    private(set) var runCallCount = 0
+
+    init(output: String) {
+        self.output = output
+    }
+
+    func run(_ executable: String, arguments: [String]) throws -> String {
+        XCTAssertEqual(executable, "brew")
+        XCTAssertEqual(arguments, ["info", "--cask", "--json=v2"])
+        runCallCount += 1
         return output
     }
 }

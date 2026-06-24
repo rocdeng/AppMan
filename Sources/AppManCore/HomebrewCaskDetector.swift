@@ -6,36 +6,68 @@ public protocol HomebrewDetecting: Sendable {
 
 public struct HomebrewCaskDetector: HomebrewDetecting {
     private let commandRunner: any CommandRunning
+    private let cache = HomebrewCaskCache()
 
     public init(commandRunner: any CommandRunning = ProcessCommandRunner()) {
         self.commandRunner = commandRunner
     }
 
     public func detectInstallSource(for app: AppRecord) throws -> InstallSource? {
+        let appName = app.path.lastPathComponent
+        let appTokens = try cache.loadIfNeeded {
+            try loadAppTokens()
+        }
+
+        guard let token = appTokens[appName] else {
+            return nil
+        }
+
+        return .homebrewCask(token: token)
+    }
+
+    private func loadAppTokens() throws -> [String: String] {
         let output: String
         do {
             output = try commandRunner.run("brew", arguments: ["info", "--cask", "--json=v2"])
         } catch CommandError.executableNotFound("brew") {
-            return nil
+            return [:]
         }
 
         guard !output.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            return nil
+            return [:]
         }
 
         let data = Data(output.utf8)
         let response = try JSONDecoder().decode(BrewInfoResponse.self, from: data)
-        let appName = app.path.lastPathComponent
+        var appTokens: [String: String] = [:]
 
         for cask in response.casks {
             for artifact in cask.artifacts {
-                if artifact.appNames.contains(appName) {
-                    return .homebrewCask(token: cask.token)
+                for appName in artifact.appNames {
+                    appTokens[appName] = cask.token
                 }
             }
         }
 
-        return nil
+        return appTokens
+    }
+}
+
+private final class HomebrewCaskCache: @unchecked Sendable {
+    private let lock = NSLock()
+    private var appTokens: [String: String]?
+
+    func loadIfNeeded(_ load: () throws -> [String: String]) throws -> [String: String] {
+        lock.lock()
+        defer { lock.unlock() }
+
+        if let appTokens {
+            return appTokens
+        }
+
+        let loadedAppTokens = try load()
+        appTokens = loadedAppTokens
+        return loadedAppTokens
     }
 }
 
