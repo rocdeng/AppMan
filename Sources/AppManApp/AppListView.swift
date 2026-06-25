@@ -42,6 +42,16 @@ struct AppListView: View {
                     }
                     .disabled(viewModel.isScanning)
                 }
+                ToolbarItem {
+                    Button {
+                        Task {
+                            await viewModel.checkUpdates()
+                        }
+                    } label: {
+                        Label("检查更新", systemImage: "arrow.down.circle")
+                    }
+                    .disabled(viewModel.isScanning || viewModel.isCheckingUpdates || viewModel.apps.isEmpty)
+                }
             }
         } detail: {
             switch selectedSection ?? .apps {
@@ -52,10 +62,10 @@ struct AppListView: View {
             }
         }
         .overlay {
-            if viewModel.isScanning {
+            if viewModel.isScanning || viewModel.isCheckingUpdates {
                 ZStack {
                     Color.black.opacity(0.08)
-                    ProgressView("正在扫描...")
+                    ProgressView(viewModel.isScanning ? "正在扫描..." : "正在检查更新...")
                         .padding(20)
                         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8))
                 }
@@ -128,9 +138,9 @@ private struct AppCatalogView: View {
                     Text(app.name)
                         .font(.headline)
                     Spacer(minLength: 12)
-                    Text(updateVersionText(for: app))
+                    Text(app.updateStatus.displayText)
                         .font(.subheadline)
-                        .foregroundStyle(updateVersionColor(for: app))
+                        .foregroundStyle(updateVersionColor(for: app.updateStatus))
                 }
 
                 HStack(spacing: 12) {
@@ -165,15 +175,17 @@ private struct AppCatalogView: View {
         }
     }
 
-    private func updateVersionText(for app: AppRecord) -> String {
-        if let version = normalized(app.shortVersion) {
-            return version
+    private func updateVersionColor(for status: AppUpdateStatus) -> Color {
+        switch status {
+        case .updateAvailable:
+            return .orange
+        case .checkFailed:
+            return .red
+        case .upToDate:
+            return .green
+        case .notChecked, .unsupported:
+            return .secondary
         }
-        return "无更新"
-    }
-
-    private func updateVersionColor(for app: AppRecord) -> Color {
-        normalized(app.shortVersion) == nil ? .secondary : .primary
     }
 
     private func normalized(_ value: String?) -> String? {

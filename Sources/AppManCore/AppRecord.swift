@@ -9,6 +9,7 @@ public struct AppRecord: Identifiable, Equatable, Sendable {
     public let path: URL
     public let sizeBytes: Int64
     public var installSource: InstallSource
+    public var updateStatus: AppUpdateStatus
 
     public init(
         id: String,
@@ -18,7 +19,8 @@ public struct AppRecord: Identifiable, Equatable, Sendable {
         buildVersion: String?,
         path: URL,
         sizeBytes: Int64,
-        installSource: InstallSource = .manual(reason: "尚未识别到安装渠道")
+        installSource: InstallSource = .manual(reason: "尚未识别到安装渠道"),
+        updateStatus: AppUpdateStatus = .notChecked
     ) {
         self.id = id
         self.name = name
@@ -28,6 +30,30 @@ public struct AppRecord: Identifiable, Equatable, Sendable {
         self.path = path
         self.sizeBytes = sizeBytes
         self.installSource = installSource
+        self.updateStatus = updateStatus
+    }
+}
+
+public enum AppUpdateStatus: Equatable, Sendable {
+    case notChecked
+    case upToDate
+    case updateAvailable(installedVersion: String?, latestVersion: String)
+    case unsupported(reason: String)
+    case checkFailed(message: String)
+
+    public var displayText: String {
+        switch self {
+        case .notChecked:
+            return "未检查"
+        case .upToDate:
+            return "最新"
+        case let .updateAvailable(_, latestVersion):
+            return "可更新到 \(latestVersion)"
+        case .unsupported:
+            return "暂不支持检查"
+        case .checkFailed:
+            return "检查失败"
+        }
     }
 }
 
