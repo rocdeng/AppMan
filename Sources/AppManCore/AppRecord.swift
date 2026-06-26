@@ -1,6 +1,6 @@
 import Foundation
 
-public struct AppRecord: Identifiable, Equatable, Sendable {
+public struct AppRecord: Identifiable, Equatable, Sendable, Codable {
     public let id: String
     public let name: String
     public let bundleIdentifier: String?
@@ -34,7 +34,7 @@ public struct AppRecord: Identifiable, Equatable, Sendable {
     }
 }
 
-public enum AppUpdateStatus: Equatable, Sendable {
+public enum AppUpdateStatus: Equatable, Sendable, Codable {
     case notChecked
     case upToDate
     case updateAvailable(installedVersion: String?, latestVersion: String)
@@ -57,7 +57,7 @@ public enum AppUpdateStatus: Equatable, Sendable {
     }
 }
 
-public enum InstallSource: Equatable, Sendable {
+public enum InstallSource: Equatable, Sendable, Codable {
     case homebrewCask(token: String)
     case macAppStore
     case sparkle(feedURL: URL)

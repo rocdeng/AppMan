@@ -11,15 +11,19 @@ final class AppListViewModel: ObservableObject {
     private let scanner: AppScanner
     private let installSourceResolver: InstallSourceResolver
     private let updateChecker: any AppUpdateChecking
+    private let appCache: AppRecordCache
 
     init(
         scanner: AppScanner = AppScanner(),
         installSourceResolver: InstallSourceResolver = InstallSourceResolver(),
-        updateChecker: any AppUpdateChecking = HomebrewCaskUpdateChecker()
+        updateChecker: any AppUpdateChecking = HomebrewCaskUpdateChecker(),
+        appCache: AppRecordCache = AppRecordCache()
     ) {
         self.scanner = scanner
         self.installSourceResolver = installSourceResolver
         self.updateChecker = updateChecker
+        self.appCache = appCache
+        apps = (try? appCache.load()) ?? []
     }
 
     func scan() async {
@@ -33,9 +37,12 @@ final class AppListViewModel: ObservableObject {
         do {
             let scanner = self.scanner
             let installSourceResolver = self.installSourceResolver
+            let appCache = self.appCache
             let resolvedApps = try await Task.detached(priority: .userInitiated) {
                 let apps = try scanner.scanInstalledApps()
-                return try installSourceResolver.resolveInstallSources(for: apps)
+                let resolvedApps = try installSourceResolver.resolveInstallSources(for: apps)
+                try appCache.save(resolvedApps)
+                return resolvedApps
             }.value
 
             apps = resolvedApps
@@ -56,9 +63,12 @@ final class AppListViewModel: ObservableObject {
 
         do {
             let updateChecker = self.updateChecker
+            let appCache = self.appCache
             let currentApps = apps
             let updatedApps = try await Task.detached(priority: .userInitiated) {
-                try updateChecker.checkUpdates(for: currentApps)
+                let updatedApps = try updateChecker.checkUpdates(for: currentApps)
+                try appCache.save(updatedApps)
+                return updatedApps
             }.value
 
             apps = updatedApps
