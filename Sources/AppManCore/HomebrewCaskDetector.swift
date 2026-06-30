@@ -26,9 +26,17 @@ public struct HomebrewCaskDetector: HomebrewDetecting {
     }
 
     private func loadAppTokens() throws -> [String: String] {
+        let installedTokens = try loadInstalledTokens()
+        guard !installedTokens.isEmpty else {
+            return [:]
+        }
+
         let output: String
         do {
-            output = try commandRunner.run("brew", arguments: ["info", "--cask", "--json=v2"])
+            output = try commandRunner.run(
+                "brew",
+                arguments: ["info", "--cask", "--json=v2"] + installedTokens
+            )
         } catch CommandError.executableNotFound("brew") {
             return [:]
         }
@@ -52,6 +60,23 @@ public struct HomebrewCaskDetector: HomebrewDetecting {
         }
 
         return appTokens
+    }
+
+    private func loadInstalledTokens() throws -> [String] {
+        let output: String
+        do {
+            output = try commandRunner.run("brew", arguments: ["list", "--cask", "--versions"])
+        } catch CommandError.executableNotFound("brew") {
+            return []
+        } catch CommandError.failed {
+            return []
+        }
+
+        return output
+            .split(whereSeparator: \.isNewline)
+            .compactMap { line in
+                line.split(whereSeparator: \.isWhitespace).first.map(String.init)
+            }
     }
 }
 

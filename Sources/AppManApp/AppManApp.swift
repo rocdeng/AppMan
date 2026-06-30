@@ -9,6 +9,7 @@ struct AppManApp: App {
             do {
                 let apps = try InstallSourceResolver()
                     .resolveInstallSources(for: AppScanner().scanInstalledApps())
+                try AppRecordCache().save(apps)
                 print("APP_MAN_SMOKE_SCAN_COUNT=\(apps.count)")
                 exit(0)
             } catch {
@@ -24,7 +25,8 @@ struct AppManApp: App {
     var body: some Scene {
         WindowGroup {
             AppListView()
-                .frame(minWidth: 900, minHeight: 560)
+                .frame(minWidth: 960, minHeight: 640)
         }
+        .defaultSize(width: 960, height: 640)
     }
 }

@@ -3,22 +3,25 @@ import XCTest
 
 final class HomebrewCaskDetectorTests: XCTestCase {
     func testDetectsAppByAppArtifactNameFromBrewInfoJSON() throws {
-        let runner = StubCommandRunner(output: """
-        {
-          "casks": [
+        let runner = StubCommandRunner(
+            installedCasksOutput: "visual-studio-code 1.0\n",
+            infoOutput: """
             {
-              "token": "visual-studio-code",
-              "artifacts": [
+              "casks": [
                 {
-                  "app": [
-                    "Visual Studio Code.app"
+                  "token": "visual-studio-code",
+                  "artifacts": [
+                    {
+                      "app": [
+                        "Visual Studio Code.app"
+                      ]
+                    }
                   ]
                 }
               ]
             }
-          ]
-        }
-        """)
+            """
+        )
         let detector = HomebrewCaskDetector(commandRunner: runner)
         let app = makeAppRecord(path: URL(fileURLWithPath: "/Applications/Visual Studio Code.app"))
 
@@ -28,7 +31,7 @@ final class HomebrewCaskDetectorTests: XCTestCase {
     }
 
     func testReturnsNilWhenBrewIsUnavailable() throws {
-        let runner = StubCommandRunner(error: CommandError.executableNotFound("brew"))
+        let runner = StubCommandRunner(listError: CommandError.executableNotFound("brew"))
         let detector = HomebrewCaskDetector(commandRunner: runner)
         let app = makeAppRecord(path: URL(fileURLWithPath: "/Applications/Visual Studio Code.app"))
 
@@ -38,27 +41,30 @@ final class HomebrewCaskDetectorTests: XCTestCase {
     }
 
     func testIgnoresNonAppArtifactsWhenMatching() throws {
-        let runner = StubCommandRunner(output: """
-        {
-          "casks": [
+        let runner = StubCommandRunner(
+            installedCasksOutput: "visual-studio-code 1.0\n",
+            infoOutput: """
             {
-              "token": "visual-studio-code",
-              "artifacts": [
+              "casks": [
                 {
-                  "binary": [
-                    "code"
-                  ]
-                },
-                {
-                  "app": [
-                    "Visual Studio Code.app"
+                  "token": "visual-studio-code",
+                  "artifacts": [
+                    {
+                      "binary": [
+                        "code"
+                      ]
+                    },
+                    {
+                      "app": [
+                        "Visual Studio Code.app"
+                      ]
+                    }
                   ]
                 }
               ]
             }
-          ]
-        }
-        """)
+            """
+        )
         let detector = HomebrewCaskDetector(commandRunner: runner)
         let app = makeAppRecord(path: URL(fileURLWithPath: "/Applications/Visual Studio Code.app"))
 
@@ -68,26 +74,29 @@ final class HomebrewCaskDetectorTests: XCTestCase {
     }
 
     func testExtractsStringAppNameFromMixedAppArtifactElements() throws {
-        let runner = StubCommandRunner(output: """
-        {
-          "casks": [
+        let runner = StubCommandRunner(
+            installedCasksOutput: "visual-studio-code 1.0\n",
+            infoOutput: """
             {
-              "token": "visual-studio-code",
-              "artifacts": [
+              "casks": [
                 {
-                  "app": [
+                  "token": "visual-studio-code",
+                  "artifacts": [
                     {
-                      "target": "Ignored.app"
-                    },
-                    42,
-                    "Visual Studio Code.app"
+                      "app": [
+                        {
+                          "target": "Ignored.app"
+                        },
+                        42,
+                        "Visual Studio Code.app"
+                      ]
+                    }
                   ]
                 }
               ]
             }
-          ]
-        }
-        """)
+            """
+        )
         let detector = HomebrewCaskDetector(commandRunner: runner)
         let app = makeAppRecord(path: URL(fileURLWithPath: "/Applications/Visual Studio Code.app"))
 
@@ -97,7 +106,7 @@ final class HomebrewCaskDetectorTests: XCTestCase {
     }
 
     func testReturnsNilForEmptyOutput() throws {
-        let runner = StubCommandRunner(output: "")
+        let runner = StubCommandRunner(installedCasksOutput: "visual-studio-code 1.0\n", infoOutput: "")
         let detector = HomebrewCaskDetector(commandRunner: runner)
         let app = makeAppRecord(path: URL(fileURLWithPath: "/Applications/Visual Studio Code.app"))
 
@@ -107,11 +116,14 @@ final class HomebrewCaskDetectorTests: XCTestCase {
     }
 
     func testReturnsNilForEmptyCasks() throws {
-        let runner = StubCommandRunner(output: """
-        {
-          "casks": []
-        }
-        """)
+        let runner = StubCommandRunner(
+            installedCasksOutput: "visual-studio-code 1.0\n",
+            infoOutput: """
+            {
+              "casks": []
+            }
+            """
+        )
         let detector = HomebrewCaskDetector(commandRunner: runner)
         let app = makeAppRecord(path: URL(fileURLWithPath: "/Applications/Visual Studio Code.app"))
 
@@ -121,32 +133,35 @@ final class HomebrewCaskDetectorTests: XCTestCase {
     }
 
     func testReturnsMatchingTokenFromMultipleCasks() throws {
-        let runner = StubCommandRunner(output: """
-        {
-          "casks": [
+        let runner = StubCommandRunner(
+            installedCasksOutput: "firefox 1.0\nvisual-studio-code 1.0\n",
+            infoOutput: """
             {
-              "token": "firefox",
-              "artifacts": [
+              "casks": [
                 {
-                  "app": [
-                    "Firefox.app"
+                  "token": "firefox",
+                  "artifacts": [
+                    {
+                      "app": [
+                        "Firefox.app"
+                      ]
+                    }
                   ]
-                }
-              ]
-            },
-            {
-              "token": "visual-studio-code",
-              "artifacts": [
+                },
                 {
-                  "app": [
-                    "Visual Studio Code.app"
+                  "token": "visual-studio-code",
+                  "artifacts": [
+                    {
+                      "app": [
+                        "Visual Studio Code.app"
+                      ]
+                    }
                   ]
                 }
               ]
             }
-          ]
-        }
-        """)
+            """
+        )
         let detector = HomebrewCaskDetector(commandRunner: runner)
         let app = makeAppRecord(path: URL(fileURLWithPath: "/Applications/Visual Studio Code.app"))
 
@@ -156,32 +171,35 @@ final class HomebrewCaskDetectorTests: XCTestCase {
     }
 
     func testReturnsFirstTokenWhenMultipleCasksDeclareSameAppName() throws {
-        let runner = StubCommandRunner(output: """
-        {
-          "casks": [
+        let runner = StubCommandRunner(
+            installedCasksOutput: "first-shared 1.0\nsecond-shared 1.0\n",
+            infoOutput: """
             {
-              "token": "first-shared",
-              "artifacts": [
+              "casks": [
                 {
-                  "app": [
-                    "Shared.app"
+                  "token": "first-shared",
+                  "artifacts": [
+                    {
+                      "app": [
+                        "Shared.app"
+                      ]
+                    }
                   ]
-                }
-              ]
-            },
-            {
-              "token": "second-shared",
-              "artifacts": [
+                },
                 {
-                  "app": [
-                    "Shared.app"
+                  "token": "second-shared",
+                  "artifacts": [
+                    {
+                      "app": [
+                        "Shared.app"
+                      ]
+                    }
                   ]
                 }
               ]
             }
-          ]
-        }
-        """)
+            """
+        )
         let detector = HomebrewCaskDetector(commandRunner: runner)
         let app = makeAppRecord(path: URL(fileURLWithPath: "/Applications/Shared.app"))
 
@@ -191,7 +209,7 @@ final class HomebrewCaskDetectorTests: XCTestCase {
     }
 
     func testCachesBrewInfoForMultipleDetectionsOnSameDetector() throws {
-        let runner = CountingCommandRunner(output: """
+        let runner = CountingCommandRunner(infoOutput: """
         {
           "casks": [
             {
@@ -216,7 +234,48 @@ final class HomebrewCaskDetectorTests: XCTestCase {
 
         XCTAssertEqual(firefoxSource, .homebrewCask(token: "firefox"))
         XCTAssertNil(safariSource)
-        XCTAssertEqual(runner.runCallCount, 1)
+        XCTAssertEqual(runner.runCallCount, 2)
+    }
+
+    func testReturnsNilWhenNoCasksAreInstalled() throws {
+        let runner = StubCommandRunner(installedCasksOutput: "")
+        let detector = HomebrewCaskDetector(commandRunner: runner)
+        let app = makeAppRecord(path: URL(fileURLWithPath: "/Applications/Visual Studio Code.app"))
+
+        let source = try detector.detectInstallSource(for: app)
+
+        XCTAssertNil(source)
+    }
+
+    func testOnlyQueriesInstalledCaskTokens() throws {
+        let runner = RecordingCommandRunner(
+            installedCasksOutput: "visual-studio-code 1.0\n",
+            infoOutput: """
+            {
+              "casks": [
+                {
+                  "token": "visual-studio-code",
+                  "artifacts": [
+                    {
+                      "app": [
+                        "Visual Studio Code.app"
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+            """
+        )
+        let detector = HomebrewCaskDetector(commandRunner: runner)
+        let app = makeAppRecord(path: URL(fileURLWithPath: "/Applications/Visual Studio Code.app"))
+
+        _ = try detector.detectInstallSource(for: app)
+
+        XCTAssertEqual(runner.commands, [
+            ["brew", "list", "--cask", "--versions"],
+            ["brew", "info", "--cask", "--json=v2", "visual-studio-code"],
+        ])
     }
 
     func testProcessCommandRunnerDrainsLargeStdoutWhileProcessWritesStderr() throws {
@@ -273,45 +332,77 @@ final class HomebrewCaskDetectorTests: XCTestCase {
 }
 
 private struct StubCommandRunner: CommandRunning {
-    private let output: String
-    private let error: CommandError?
-    let expectedExecutable: String
-    let expectedArguments: [String]
+    private let installedCasksOutput: String
+    private let infoOutput: String
+    private let listError: CommandError?
+    private let infoError: CommandError?
 
     init(
-        output: String = "",
-        error: CommandError? = nil,
-        expectedExecutable: String = "brew",
-        expectedArguments: [String] = ["info", "--cask", "--json=v2"]
+        installedCasksOutput: String = "",
+        infoOutput: String = "",
+        listError: CommandError? = nil,
+        infoError: CommandError? = nil
     ) {
-        self.output = output
-        self.error = error
-        self.expectedExecutable = expectedExecutable
-        self.expectedArguments = expectedArguments
-    }
-
-    func run(_ executable: String, arguments: [String]) throws -> String {
-        XCTAssertEqual(executable, expectedExecutable)
-        XCTAssertEqual(arguments, expectedArguments)
-        if let error {
-            throw error
-        }
-        return output
-    }
-}
-
-private final class CountingCommandRunner: CommandRunning, @unchecked Sendable {
-    private let output: String
-    private(set) var runCallCount = 0
-
-    init(output: String) {
-        self.output = output
+        self.installedCasksOutput = installedCasksOutput
+        self.infoOutput = infoOutput
+        self.listError = listError
+        self.infoError = infoError
     }
 
     func run(_ executable: String, arguments: [String]) throws -> String {
         XCTAssertEqual(executable, "brew")
-        XCTAssertEqual(arguments, ["info", "--cask", "--json=v2"])
+        switch arguments.prefix(3) {
+        case ["list", "--cask", "--versions"]:
+            if let listError {
+                throw listError
+            }
+            return installedCasksOutput
+        case ["info", "--cask", "--json=v2"]:
+            if let infoError {
+                throw infoError
+            }
+            return infoOutput
+        default:
+            XCTFail("Unexpected brew arguments: \(arguments)")
+            return ""
+        }
+    }
+}
+
+private final class CountingCommandRunner: CommandRunning, @unchecked Sendable {
+    private let infoOutput: String
+    private(set) var runCallCount = 0
+
+    init(infoOutput: String) {
+        self.infoOutput = infoOutput
+    }
+
+    func run(_ executable: String, arguments: [String]) throws -> String {
+        XCTAssertEqual(executable, "brew")
         runCallCount += 1
-        return output
+        if arguments == ["list", "--cask", "--versions"] {
+            return "firefox 1.0\n"
+        }
+        XCTAssertEqual(arguments, ["info", "--cask", "--json=v2", "firefox"])
+        return infoOutput
+    }
+}
+
+private final class RecordingCommandRunner: CommandRunning, @unchecked Sendable {
+    private let installedCasksOutput: String
+    private let infoOutput: String
+    private(set) var commands: [[String]] = []
+
+    init(installedCasksOutput: String, infoOutput: String) {
+        self.installedCasksOutput = installedCasksOutput
+        self.infoOutput = infoOutput
+    }
+
+    func run(_ executable: String, arguments: [String]) throws -> String {
+        commands.append([executable] + arguments)
+        if arguments == ["list", "--cask", "--versions"] {
+            return installedCasksOutput
+        }
+        return infoOutput
     }
 }

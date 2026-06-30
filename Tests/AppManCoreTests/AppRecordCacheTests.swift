@@ -33,6 +33,31 @@ final class AppRecordCacheTests: XCTestCase {
         XCTAssertEqual(loadedApps, apps)
     }
 
+    func testIgnoresLegacyArrayCache() throws {
+        let cacheURL = temporaryCacheURL()
+        try FileManager.default.createDirectory(
+            at: cacheURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        let legacyData = try JSONEncoder().encode([
+            AppRecord(
+                id: "com.example.legacy",
+                name: "Legacy",
+                bundleIdentifier: "com.example.legacy",
+                shortVersion: nil,
+                buildVersion: nil,
+                path: URL(fileURLWithPath: "/Applications/Legacy.app"),
+                sizeBytes: 0
+            )
+        ])
+        try legacyData.write(to: cacheURL)
+        let cache = AppRecordCache(cacheURL: cacheURL)
+
+        let apps = try cache.load()
+
+        XCTAssertEqual(apps, [])
+    }
+
     private func temporaryCacheURL() -> URL {
         FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)

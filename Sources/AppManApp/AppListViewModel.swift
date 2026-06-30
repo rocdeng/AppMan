@@ -8,6 +8,10 @@ final class AppListViewModel: ObservableObject {
     @Published private(set) var isCheckingUpdates = false
     @Published var errorMessage: String?
 
+    var hasCachedApps: Bool {
+        !apps.isEmpty
+    }
+
     private let scanner: AppScanner
     private let installSourceResolver: InstallSourceResolver
     private let updateChecker: any AppUpdateChecking

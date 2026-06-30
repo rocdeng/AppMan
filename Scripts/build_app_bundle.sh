@@ -8,6 +8,7 @@ macos_dir="$contents_dir/MacOS"
 resources_dir="$contents_dir/Resources"
 plist_file="$contents_dir/Info.plist"
 
+swift build
 bin_path="$(swift build --show-bin-path)"
 
 rm -rf "$bundle_dir"

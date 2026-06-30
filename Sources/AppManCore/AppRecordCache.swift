@@ -1,6 +1,8 @@
 import Foundation
 
 public struct AppRecordCache: @unchecked Sendable {
+    private static let schemaVersion = 2
+
     private let cacheURL: URL
     private let fileManager: FileManager
 
@@ -18,7 +20,13 @@ public struct AppRecordCache: @unchecked Sendable {
         }
 
         let data = try Data(contentsOf: cacheURL)
-        return try JSONDecoder().decode([AppRecord].self, from: data)
+        guard let payload = try? JSONDecoder().decode(CachePayload.self, from: data) else {
+            return []
+        }
+        guard payload.schemaVersion == Self.schemaVersion else {
+            return []
+        }
+        return payload.apps
     }
 
     public func save(_ apps: [AppRecord]) throws {
@@ -27,7 +35,7 @@ public struct AppRecordCache: @unchecked Sendable {
 
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-        let data = try encoder.encode(apps)
+        let data = try encoder.encode(CachePayload(schemaVersion: Self.schemaVersion, apps: apps))
         try data.write(to: cacheURL, options: [.atomic])
     }
 
@@ -38,4 +46,9 @@ public struct AppRecordCache: @unchecked Sendable {
             .appendingPathComponent("AppMan", isDirectory: true)
             .appendingPathComponent("apps-cache.json")
     }
+}
+
+private struct CachePayload: Codable {
+    let schemaVersion: Int
+    let apps: [AppRecord]
 }
