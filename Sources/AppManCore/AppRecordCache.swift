@@ -40,10 +40,7 @@ public struct AppRecordCache: @unchecked Sendable {
     }
 
     public static func defaultCacheURL() -> URL {
-        let baseURL = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)
-            .first ?? FileManager.default.homeDirectoryForCurrentUser
-        return baseURL
-            .appendingPathComponent("AppMan", isDirectory: true)
+        AppManSupportDirectory.url()
             .appendingPathComponent("apps-cache.json")
     }
 }

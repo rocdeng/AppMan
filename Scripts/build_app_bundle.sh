@@ -7,6 +7,8 @@ contents_dir="$bundle_dir/Contents"
 macos_dir="$contents_dir/MacOS"
 resources_dir="$contents_dir/Resources"
 plist_file="$contents_dir/Info.plist"
+icon_file="$project_root/Resources/AppIcon/Icon.icns"
+recipes_dir="$project_root/Resources/UpdateRecipes"
 
 swift build
 bin_path="$(swift build --show-bin-path)"
@@ -16,6 +18,10 @@ mkdir -p "$macos_dir" "$resources_dir"
 
 cp "$bin_path/AppMan" "$macos_dir/AppMan"
 chmod +x "$macos_dir/AppMan"
+cp "$icon_file" "$resources_dir/AppMan.icns"
+if [[ -d "$recipes_dir" ]]; then
+  cp -R "$recipes_dir" "$resources_dir/UpdateRecipes"
+fi
 
 cat > "$plist_file" <<'PLIST'
 <?xml version="1.0" encoding="UTF-8"?>
@@ -29,6 +35,8 @@ cat > "$plist_file" <<'PLIST'
     <key>CFBundleIdentifier</key>
     <string>com.dengpeng.AppMan</string>
     <key>CFBundleName</key>
+    <string>AppMan</string>
+    <key>CFBundleIconFile</key>
     <string>AppMan</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>

@@ -1,0 +1,12 @@
+{
+  "id": "com.kingsoft.wpsoffice.mac",
+  "name": "wpsoffice",
+  "recipePrompt": "这个规则用于识别 WPS Office macOS。官网页面包含下载统计、资源名和多产品版本，当前不自动抽取版本，避免把页面资源信息误报为 app 版本。",
+  "match": {
+    "bundleIdentifier": "com.kingsoft.wpsoffice.mac",
+    "appName": "wpsoffice",
+    "officialHost": "wps.com"
+  },
+  "checks": [],
+  "updatePageURL": "https://www.wps.com/office/mac/"
+}

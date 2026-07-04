@@ -1,0 +1,29 @@
+{
+  "id": "com.ScooterSoftware.BeyondCompare",
+  "name": "Beyond Compare",
+  "recipePrompt": "这个规则用于检测 Beyond Compare 的最新版本。官方页面 https://www.scootersoftware.com/download 明确写有 Current Version: v5.2.3，并且 macOS 下载链接形如 BCompareOSX-5.2.3.32296.zip。优先取 Current Version 文本；下载链接可作为带 build 号的补充。",
+  "match": {
+    "bundleIdentifier": "com.ScooterSoftware.BeyondCompare",
+    "appName": "Beyond Compare",
+    "officialHost": "scootersoftware.com"
+  },
+  "checks": [
+    {
+      "url": "https://www.scootersoftware.com/download",
+      "extract": {
+        "type": "linkRegex",
+        "pattern": "BCompareOSX-([0-9]+(?:\\.[0-9A-Za-z]+){1,5})\\.zip",
+        "versionGroup": 1
+      }
+    },
+    {
+      "url": "https://www.scootersoftware.com/download",
+      "extract": {
+        "type": "regex",
+        "pattern": "(?i)Current\\s+Version:\\s*(?:&nbsp;\\s*)?v?([0-9]+(?:\\.[0-9A-Za-z]+){1,5})",
+        "versionGroup": 1
+      }
+    }
+  ],
+  "updatePageURL": "https://www.scootersoftware.com/download"
+}

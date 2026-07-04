@@ -1,0 +1,12 @@
+{
+  "id": "com.tencent.qq",
+  "name": "QQ",
+  "recipePrompt": "这个规则用于识别 QQ macOS 客户端。im.qq.com 下载页可见下载链接但容易混合 dmg 资源名和内部构建号，当前不自动抽取版本。",
+  "match": {
+    "bundleIdentifier": "com.tencent.qq",
+    "appName": "QQ",
+    "officialHost": "qq.com"
+  },
+  "checks": [],
+  "updatePageURL": "https://im.qq.com/macqq/index.shtml"
+}

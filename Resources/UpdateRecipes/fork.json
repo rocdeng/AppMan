@@ -1,0 +1,21 @@
+{
+  "id": "com.DanPristupov.Fork",
+  "name": "Fork",
+  "recipePrompt": "这个规则用于检测 Fork。官方 Sparkle feed 是 https://fork.dev/update/feed.xml，enclosure 的下载链接形如 Fork-2.68.1.dmg，比 sparkle:version=\"2.68.0\" 更接近 app 显示版本。",
+  "match": {
+    "bundleIdentifier": "com.DanPristupov.Fork",
+    "appName": "Fork",
+    "officialHost": "fork.dev"
+  },
+  "checks": [
+    {
+      "url": "https://fork.dev/update/feed.xml",
+      "extract": {
+        "type": "linkRegex",
+        "pattern": "Fork-([0-9]+(?:\\.[0-9A-Za-z]+){1,5})\\.dmg",
+        "versionGroup": 1
+      }
+    }
+  ],
+  "updatePageURL": "https://git-fork.com/"
+}

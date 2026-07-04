@@ -1,0 +1,12 @@
+{
+  "id": "com.microsoft.edgemac",
+  "name": "Microsoft Edge",
+  "recipePrompt": "这个规则用于识别 Microsoft Edge。Edge 更新需要专用微软更新/企业下载元数据并区分 channel，当前不从普通网页抽取版本。",
+  "match": {
+    "bundleIdentifier": "com.microsoft.edgemac",
+    "appName": "Microsoft Edge",
+    "officialHost": "microsoft.com"
+  },
+  "checks": [],
+  "updatePageURL": "https://www.microsoft.com/edge/download"
+}

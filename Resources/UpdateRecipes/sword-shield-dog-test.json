@@ -1,0 +1,12 @@
+{
+  "id": "com.test.dog",
+  "name": "Sword Shield Dog Test",
+  "recipePrompt": "这个规则用于识别本机测试应用 Sword Shield Dog Test。它不是公开发布 app，不应该联网搜索更新。",
+  "match": {
+    "bundleIdentifier": "com.test.dog",
+    "appName": "Sword Shield Dog Test",
+    "officialHost": null
+  },
+  "checks": [],
+  "updatePageURL": null
+}

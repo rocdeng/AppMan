@@ -1,0 +1,21 @@
+{
+  "id": "now.typeless.desktop",
+  "name": "Typeless",
+  "recipePrompt": "这个规则用于检测 Typeless desktop。Electron updater 配置指向 typeless-static.com/desktop-release，arm64.yml 中 version 字段是当前 arm64 渠道版本。",
+  "match": {
+    "bundleIdentifier": "now.typeless.desktop",
+    "appName": "Typeless",
+    "officialHost": "typeless-static.com"
+  },
+  "checks": [
+    {
+      "url": "https://typeless-static.com/desktop-release/arm64.yml",
+      "extract": {
+        "type": "regex",
+        "pattern": "(?m)^version:\\s*([0-9]+(?:\\.[0-9A-Za-z]+){1,5})\\s*$",
+        "versionGroup": 1
+      }
+    }
+  ],
+  "updatePageURL": "https://www.typeless.com/"
+}

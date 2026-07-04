@@ -1,0 +1,12 @@
+{
+  "id": "com.dengpeng.modelQL",
+  "name": "modelQL",
+  "recipePrompt": "这个规则用于识别本机自编译 modelQL。用户说明该 app 版本号专门改高以避免被 brew 覆盖，不应该自动根据网络结果判断更新。",
+  "match": {
+    "bundleIdentifier": "com.dengpeng.modelQL",
+    "appName": "modelQL",
+    "officialHost": null
+  },
+  "checks": [],
+  "updatePageURL": null
+}

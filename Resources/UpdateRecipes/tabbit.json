@@ -1,0 +1,12 @@
+{
+  "id": "com.tabbit-ai.Tabbit",
+  "name": "Tabbit",
+  "recipePrompt": "这个规则用于识别 Tabbit。当前搜索结果未能确认稳定官网/发布接口，先不自动抽取版本。",
+  "match": {
+    "bundleIdentifier": "com.tabbit-ai.Tabbit",
+    "appName": "Tabbit",
+    "officialHost": null
+  },
+  "checks": [],
+  "updatePageURL": null
+}

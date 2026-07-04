@@ -1,0 +1,12 @@
+{
+  "id": "com.avast.AAFM",
+  "name": "Avast",
+  "recipePrompt": "这个规则用于识别 Avast Free Security for Mac。官方页是 avast.com/free-mac-security，但页面包含大量图片/脚本资源版本，通用解析会误抽到 32.svg 等假版本；当前不自动抽取版本。",
+  "match": {
+    "bundleIdentifier": "com.avast.AAFM",
+    "appName": "Avast",
+    "officialHost": "avast.com"
+  },
+  "checks": [],
+  "updatePageURL": "https://www.avast.com/en-us/free-mac-security"
+}

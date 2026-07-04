@@ -1,0 +1,12 @@
+{
+  "id": "com.cocos.dashboard",
+  "name": "CocosDashboard",
+  "recipePrompt": "这个规则用于识别 CocosDashboard。Cocos 文档页混合 Cocos Creator/Dashboard/引擎版本，当前不自动抽取版本，避免把 Creator 3.8 当成 Dashboard 更新。",
+  "match": {
+    "bundleIdentifier": "com.cocos.dashboard",
+    "appName": "CocosDashboard",
+    "officialHost": "cocos.com"
+  },
+  "checks": [],
+  "updatePageURL": "https://www.cocos.com/en/creator-download"
+}

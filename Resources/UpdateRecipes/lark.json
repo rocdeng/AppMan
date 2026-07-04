@@ -1,0 +1,12 @@
+{
+  "id": "com.electron.lark",
+  "name": "Lark",
+  "recipePrompt": "这个规则用于识别 Lark。Lark 官方下载页不稳定暴露可比较的 macOS 客户端版本，且页面里可能有 Chromium/Electron 版本号，当前不自动抽取版本。",
+  "match": {
+    "bundleIdentifier": "com.electron.lark",
+    "appName": "Lark",
+    "officialHost": "larksuite.com"
+  },
+  "checks": [],
+  "updatePageURL": "https://www.larksuite.com/en_us/download"
+}

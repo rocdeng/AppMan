@@ -1,0 +1,12 @@
+{
+  "id": "com.vivo.pcsuite",
+  "name": "pcsuite",
+  "recipePrompt": "这个规则用于识别 vivo PC Suite。当前搜索结果容易命中社交媒体或非正式页面，未确认稳定官方 macOS 更新接口，先不自动抽取版本。",
+  "match": {
+    "bundleIdentifier": "com.vivo.pcsuite",
+    "appName": "pcsuite",
+    "officialHost": "vivo.com"
+  },
+  "checks": [],
+  "updatePageURL": null
+}

@@ -1,0 +1,21 @@
+{
+  "id": "dev.pencil.desktop",
+  "name": "Pencil",
+  "recipePrompt": "这个规则用于检测 Pencil desktop。Electron updater 配置指向 GitHub highagency/pencil-desktop-releases，releases/latest 的 tag_name 是版本号。",
+  "match": {
+    "bundleIdentifier": "dev.pencil.desktop",
+    "appName": "Pencil",
+    "officialHost": "github.com"
+  },
+  "checks": [
+    {
+      "url": "https://api.github.com/repos/highagency/pencil-desktop-releases/releases/latest",
+      "extract": {
+        "type": "regex",
+        "pattern": "\"tag_name\"\\s*:\\s*\"v?([0-9]+(?:\\.[0-9A-Za-z]+){1,5})\"",
+        "versionGroup": 1
+      }
+    }
+  ],
+  "updatePageURL": "https://github.com/highagency/pencil-desktop-releases/releases/latest"
+}

@@ -1,0 +1,12 @@
+{
+  "id": "com.tencent.xinWeChat",
+  "name": "WeChat",
+  "recipePrompt": "这个规则用于识别微信 macOS 客户端。微信官方页面和下载入口不稳定暴露可比较 app 版本，当前不自动抽取版本。",
+  "match": {
+    "bundleIdentifier": "com.tencent.xinWeChat",
+    "appName": "WeChat",
+    "officialHost": "wechat.com"
+  },
+  "checks": [],
+  "updatePageURL": "https://mac.weixin.qq.com/"
+}

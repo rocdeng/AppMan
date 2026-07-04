@@ -1,0 +1,12 @@
+{
+  "id": "dev.warp.Warp-Stable",
+  "name": "Warp",
+  "recipePrompt": "这个规则用于识别 Warp Stable。Warp 官方下载页会包含脚本/资源版本号，通用解析曾误抽 60.js；当前不自动抽取版本，后续可接入 Warp 官方更新元数据后完善。",
+  "match": {
+    "bundleIdentifier": "dev.warp.Warp-Stable",
+    "appName": "Warp",
+    "officialHost": "warp.dev"
+  },
+  "checks": [],
+  "updatePageURL": "https://www.warp.dev/"
+}

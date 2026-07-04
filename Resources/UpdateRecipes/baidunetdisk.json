@@ -1,0 +1,12 @@
+{
+  "id": "com.baidu.BaiduNetdisk-mac",
+  "name": "BaiduNetdisk_mac",
+  "recipePrompt": "这个规则用于识别百度网盘 macOS 客户端。官方下载页和历史下载页容易混合 Windows/移动端版本，当前不自动抽取版本，避免误报。",
+  "match": {
+    "bundleIdentifier": "com.baidu.BaiduNetdisk-mac",
+    "appName": "BaiduNetdisk_mac",
+    "officialHost": "baidu.com"
+  },
+  "checks": [],
+  "updatePageURL": "https://pan.baidu.com/download"
+}

@@ -1,0 +1,12 @@
+{
+  "id": "com.autodesk.dls.streamer.scriptapp.Remove-Autodesk-Fusion",
+  "name": "Remove Autodesk Fusion",
+  "recipePrompt": "这个规则用于识别 Remove Autodesk Fusion。它是 Autodesk Fusion 附带卸载器，不应该单独联网判断更新。",
+  "match": {
+    "bundleIdentifier": "com.autodesk.dls.streamer.scriptapp.Remove-Autodesk-Fusion",
+    "appName": "Remove Autodesk Fusion",
+    "officialHost": "autodesk.com"
+  },
+  "checks": [],
+  "updatePageURL": "https://www.autodesk.com/products/fusion-360/overview"
+}

@@ -1,0 +1,21 @@
+{
+  "id": "com.electron.ollama",
+  "name": "Ollama",
+  "recipePrompt": "这个规则用于检测 Ollama。官方发布在 GitHub ollama/ollama releases，tag_name 是最新版本。",
+  "match": {
+    "bundleIdentifier": "com.electron.ollama",
+    "appName": "Ollama",
+    "officialHost": "github.com"
+  },
+  "checks": [
+    {
+      "url": "https://api.github.com/repos/ollama/ollama/releases/latest",
+      "extract": {
+        "type": "regex",
+        "pattern": "\"tag_name\"\\s*:\\s*\"v?([0-9]+(?:\\.[0-9A-Za-z]+){1,5})\"",
+        "versionGroup": 1
+      }
+    }
+  ],
+  "updatePageURL": "https://ollama.com/download/mac"
+}

@@ -1,0 +1,12 @@
+{
+  "id": "com.avast.av.uninstaller",
+  "name": "com.avast.av.uninstaller",
+  "recipePrompt": "这个规则用于识别 Avast 卸载器。它随 Avast 主应用附带，不应该单独用网页版本号判断更新。",
+  "match": {
+    "bundleIdentifier": "com.avast.av.uninstaller",
+    "appName": "com.avast.av.uninstaller",
+    "officialHost": "avast.com"
+  },
+  "checks": [],
+  "updatePageURL": "https://support.avast.com/article/uninstall-mac-security/"
+}

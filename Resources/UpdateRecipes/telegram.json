@@ -1,0 +1,21 @@
+{
+  "id": "ru.keepcoder.Telegram",
+  "name": "Telegram",
+  "recipePrompt": "这个规则用于检测 Telegram for macOS。官方 Sparkle feed 是 https://osx.telegram.org/updates/versions.xml，enclosure 的 sparkle:shortVersionString 是 app 显示版本。",
+  "match": {
+    "bundleIdentifier": "ru.keepcoder.Telegram",
+    "appName": "Telegram",
+    "officialHost": "telegram.org"
+  },
+  "checks": [
+    {
+      "url": "https://osx.telegram.org/updates/versions.xml",
+      "extract": {
+        "type": "regex",
+        "pattern": "sparkle:shortVersionString=\"([0-9]+(?:\\.[0-9A-Za-z]+){1,5})\"",
+        "versionGroup": 1
+      }
+    }
+  ],
+  "updatePageURL": "https://telegram.org/dl/macos"
+}

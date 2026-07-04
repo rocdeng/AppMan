@@ -25,6 +25,7 @@ final class HomebrewCaskUpdateCheckerTests: XCTestCase {
             apps.first?.updateStatus,
             .updateAvailable(installedVersion: "0.141.0", latestVersion: "0.142.1")
         )
+        XCTAssertEqual(apps.first?.updateURL, URL(string: "https://formulae.brew.sh/cask/codex"))
     }
 
     func testExtractsJSONAfterHomebrewAutoUpdateOutput() throws {
@@ -64,6 +65,7 @@ final class HomebrewCaskUpdateCheckerTests: XCTestCase {
         let apps = try checker.checkUpdates(for: [app])
 
         XCTAssertEqual(apps.first?.updateStatus, .upToDate)
+        XCTAssertEqual(apps.first?.updateURL, URL(string: "https://formulae.brew.sh/cask/codex"))
     }
 
     func testMarksNonHomebrewAppsAsUnsupportedWithoutCallingBrew() throws {

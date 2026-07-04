@@ -1,0 +1,12 @@
+{
+  "id": "com.anthropic.claude-code-url-handler",
+  "name": "Claude Code URL Handler",
+  "recipePrompt": "这个规则用于识别 Claude Code URL Handler。它是 Claude/Codex 工作流里的辅助 URL handler，不是独立面向用户发布的 app；当前不自动抽取版本。",
+  "match": {
+    "bundleIdentifier": "com.anthropic.claude-code-url-handler",
+    "appName": "Claude Code URL Handler",
+    "officialHost": "anthropic.com"
+  },
+  "checks": [],
+  "updatePageURL": "https://support.claude.com/"
+}

@@ -1,0 +1,12 @@
+{
+  "id": "com.anthropic.claudefordesktop",
+  "name": "Claude",
+  "recipePrompt": "这个规则用于识别 Claude Desktop。官方入口是 support.claude.com 的安装说明，但页面不稳定暴露 macOS app 版本，通用解析会误抽 Linux 包版本如 64.deb；当前不自动抽取版本。",
+  "match": {
+    "bundleIdentifier": "com.anthropic.claudefordesktop",
+    "appName": "Claude",
+    "officialHost": "claude.com"
+  },
+  "checks": [],
+  "updatePageURL": "https://support.claude.com/en/articles/10065433-install-claude-desktop"
+}

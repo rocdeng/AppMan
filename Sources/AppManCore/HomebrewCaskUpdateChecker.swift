@@ -45,6 +45,8 @@ public struct HomebrewCaskUpdateChecker: AppUpdateChecking {
                 return updatedApp
             }
 
+            updatedApp.updateURL = Self.caskPageURL(for: token)
+
             if let checkFailureMessage {
                 updatedApp.updateStatus = .checkFailed(message: checkFailureMessage)
                 return updatedApp
@@ -61,6 +63,14 @@ public struct HomebrewCaskUpdateChecker: AppUpdateChecking {
 
             return updatedApp
         }
+    }
+
+    private static func caskPageURL(for token: String) -> URL? {
+        var components = URLComponents()
+        components.scheme = "https"
+        components.host = "formulae.brew.sh"
+        components.path = "/cask/\(token)"
+        return components.url
     }
 
     private func loadOutdatedCasks() throws -> [String: OutdatedCask] {

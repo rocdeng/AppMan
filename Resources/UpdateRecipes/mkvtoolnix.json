@@ -1,0 +1,12 @@
+{
+  "id": "download.mkvtoolnix.MKVToolNix",
+  "name": "MKVToolNix",
+  "recipePrompt": "这个规则用于识别 MKVToolNix。官网 macOS 页面目前可抓到的页面版本和本机 app 版本体系不一致，当前不自动抽取版本，避免把网页组件版本误认为 app 版本。",
+  "match": {
+    "bundleIdentifier": "download.mkvtoolnix.MKVToolNix",
+    "appName": "MKVToolNix",
+    "officialHost": "mkvtoolnix.download"
+  },
+  "checks": [],
+  "updatePageURL": "https://mkvtoolnix.download/macos/"
+}

@@ -1,0 +1,12 @@
+{
+  "id": "app.omlx",
+  "name": "oMLX",
+  "recipePrompt": "这个规则用于识别 oMLX。当前未确认官方发布源和稳定更新接口，搜索结果容易命中教程文章，先不自动抽取版本。",
+  "match": {
+    "bundleIdentifier": "app.omlx",
+    "appName": "oMLX",
+    "officialHost": null
+  },
+  "checks": [],
+  "updatePageURL": null
+}

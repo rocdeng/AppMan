@@ -3,7 +3,7 @@ import AppKit
 import SwiftUI
 
 private enum AppSection: String, CaseIterable, Identifiable {
-    case apps = "App"
+    case apps = "应用程序"
     case settings = "设置"
 
     var id: String { rawValue }
@@ -14,7 +14,7 @@ private enum AppLayout {
     static let toolbarHeight: CGFloat = 27
     static let headerHeight: CGFloat = 25
     static let chromeHeight = titlebarHeight + toolbarHeight + headerHeight
-    static let tableTopInset = chromeHeight
+    static let tableTopInset = titlebarHeight + toolbarHeight - 12
 }
 
 private enum AppTableColumnLayout {
@@ -22,8 +22,14 @@ private enum AppTableColumnLayout {
     static let sourceWidth: CGFloat = 115
     static let currentVersionWidth: CGFloat = 328
     static let latestVersionWidth: CGFloat = 220
+    static let scrollerWidth: CGFloat = 16
     static let nameLeadingPadding: CGFloat = 29
     static let cellHorizontalPadding: CGFloat = 8
+
+    static func nameWidth(for totalWidth: CGFloat) -> CGFloat {
+        let fixedWidth = sourceWidth + currentVersionWidth + latestVersionWidth + scrollerWidth
+        return max(nameWidth, totalWidth - fixedWidth)
+    }
 }
 
 struct AppListView: View {
@@ -32,6 +38,18 @@ struct AppListView: View {
     @State private var selectedAppID: AppRecord.ID?
     @State private var didScanOnAppear = false
     @State private var searchText = ""
+    @State private var isShowingAppInfo = false
+    @State private var appPendingUninstall: AppRecord?
+    @State private var appPendingSelfUpdateURL: AppRecord?
+    @State private var selectedIgnoredAppPath: URL?
+
+    private var selectedApp: AppRecord? {
+        guard let selectedAppID else {
+            return nil
+        }
+
+        return viewModel.apps.first { $0.id == selectedAppID }
+    }
 
     @MainActor
     init() {
@@ -61,23 +79,39 @@ struct AppListView: View {
                     selectedSection: $selectedSection,
                     searchText: $searchText,
                     showsHeader: selectedSection == .apps,
+                    hasSelection: selectedApp != nil,
                     canCheckUpdates: !viewModel.apps.isEmpty,
                     isScanning: viewModel.isScanning,
                     isCheckingUpdates: viewModel.isCheckingUpdates,
-                    scan: {
-                        await viewModel.scan()
+                    isUpdatingApp: viewModel.isUpdatingApp,
+                    isUninstalling: viewModel.isUninstalling,
+                    showInfo: {
+                        isShowingAppInfo = true
                     },
-                    checkUpdates: {
+                    checkSelectedAppUpdates: {
+                        if let selectedApp {
+                            await viewModel.checkUpdates(for: selectedApp)
+                        }
+                    },
+                    checkAllUpdates: {
                         await viewModel.checkUpdates()
+                    },
+                    updateAll: {
+                        await viewModel.updateAll { url in
+                            NSWorkspace.shared.open(url)
+                        }
+                    },
+                    uninstall: {
+                        appPendingUninstall = selectedApp
                     }
                 )
             )
         )
         .overlay {
-            if viewModel.isScanning || viewModel.isCheckingUpdates {
+            if viewModel.isScanning || viewModel.isCheckingUpdates || viewModel.isUpdatingApp || viewModel.isUninstalling {
                 ZStack {
                     Color.black.opacity(0.08)
-                    ProgressView(viewModel.isScanning ? "正在扫描..." : "正在检查更新...")
+                    ProgressView(progressText)
                         .padding(20)
                         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8))
                 }
@@ -98,20 +132,62 @@ struct AppListView: View {
         } message: {
             Text(viewModel.errorMessage ?? "未知错误")
         }
+        .sheet(isPresented: $isShowingAppInfo) {
+            if let selectedApp {
+                AppInfoDialog(app: selectedApp)
+            }
+        }
+        .sheet(item: $appPendingSelfUpdateURL) { app in
+            SelfUpdateURLDialog(app: app) { url in
+                await viewModel.saveSelfUpdateURL(url, for: app)
+                appPendingSelfUpdateURL = nil
+            }
+        }
+        .sheet(item: $appPendingUninstall) { app in
+            UninstallReviewDialog(app: app) { selectedCandidates in
+                let didUninstall = await viewModel.uninstall(app, candidates: selectedCandidates)
+                if didUninstall {
+                    appPendingUninstall = nil
+                    selectedAppID = nil
+                }
+            }
+        }
         .onAppear {
             guard !didScanOnAppear else {
                 return
             }
 
             didScanOnAppear = true
-            guard !viewModel.hasCachedApps else {
+
+            if viewModel.hasCachedApps {
+                if viewModel.automaticallyChecksUpdatesOnLaunch {
+                    Task {
+                        await viewModel.checkUpdates()
+                    }
+                }
                 return
             }
 
             Task {
                 await viewModel.scan()
+                if viewModel.automaticallyChecksUpdatesOnLaunch {
+                    await viewModel.checkUpdates()
+                }
             }
         }
+    }
+
+    private var progressText: String {
+        if viewModel.isScanning {
+            return "正在扫描..."
+        }
+        if viewModel.isCheckingUpdates {
+            return "正在检查更新..."
+        }
+        if viewModel.isUpdatingApp {
+            return "正在更新..."
+        }
+        return "正在卸载..."
     }
 
     @ViewBuilder
@@ -126,25 +202,75 @@ struct AppListView: View {
 
     @ViewBuilder
     private var appsSection: some View {
-        AppCatalogView(
-            apps: viewModel.apps,
-            selectedAppID: $selectedAppID,
-            searchText: $searchText
-        )
+            AppCatalogView(
+                apps: viewModel.apps,
+                selectedAppID: $selectedAppID,
+                searchText: $searchText,
+                updateApp: { app in
+                    await viewModel.update(app) { url in
+                        NSWorkspace.shared.open(url)
+                    }
+                },
+                editSelfUpdateURL: { app in
+                    appPendingSelfUpdateURL = app
+                },
+                ignoreUpdates: { app in
+                    viewModel.ignoreUpdates(for: app)
+                }
+            )
     }
 
     @ViewBuilder
     private var settingsSection: some View {
-        VStack(spacing: 12) {
-            Image(systemName: "gearshape")
-                .font(.largeTitle)
-                .foregroundStyle(.secondary)
-            Text("设置")
-                .font(.title3)
-            Text("后续会在这里放清理、更新和行为偏好。")
-                .foregroundStyle(.secondary)
+        VStack(alignment: .leading, spacing: 18) {
+            Toggle(
+                "启动 App 时自动检查更新",
+                isOn: Binding(
+                    get: { viewModel.automaticallyChecksUpdatesOnLaunch },
+                    set: { viewModel.setAutomaticallyChecksUpdatesOnLaunch($0) }
+                )
+            )
+            .toggleStyle(.checkbox)
+            .font(.system(size: 13))
+
+            VStack(alignment: .leading, spacing: 6) {
+                Text("TinyFish API Key")
+                    .font(.system(size: 13, weight: .semibold))
+                SecureField(
+                    "未设置时使用 Google 搜索",
+                    text: Binding(
+                        get: { viewModel.tinyFishAPIKey },
+                        set: { viewModel.setTinyFishAPIKey($0) }
+                    )
+                )
+                .textFieldStyle(.roundedBorder)
+                .font(.system(size: 13))
+                .frame(maxWidth: 420)
+            }
+
+            Divider()
+
+            Text("忽略更新检查")
+                .font(.system(size: 13, weight: .semibold))
+
+            IgnoredAppsList(
+                ignoredApps: viewModel.ignoredApps,
+                selectedIgnoredAppPath: $selectedIgnoredAppPath
+            )
+
+            HStack {
+                Spacer()
+                Button("删除") {
+                    if let selectedIgnoredAppPath {
+                        viewModel.removeIgnoredApp(path: selectedIgnoredAppPath)
+                        self.selectedIgnoredAppPath = nil
+                    }
+                }
+                .disabled(selectedIgnoredAppPath == nil)
+            }
         }
-        .padding(.top, AppLayout.titlebarHeight + AppLayout.toolbarHeight)
+        .padding(.top, AppLayout.titlebarHeight + AppLayout.toolbarHeight + 26)
+        .padding(.horizontal, 32)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
@@ -153,12 +279,22 @@ private struct AppChromeView: View {
     @Binding var selectedSection: AppSection
     @Binding var searchText: String
     let showsHeader: Bool
+    let hasSelection: Bool
     let canCheckUpdates: Bool
     let isScanning: Bool
     let isCheckingUpdates: Bool
-    let scan: () async -> Void
-    let checkUpdates: () async -> Void
+    let isUpdatingApp: Bool
+    let isUninstalling: Bool
+    let showInfo: () -> Void
+    let checkSelectedAppUpdates: () async -> Void
+    let checkAllUpdates: () async -> Void
+    let updateAll: () async -> Void
+    let uninstall: () -> Void
     @State private var isSearchExpanded = false
+
+    private var isBusy: Bool {
+        isScanning || isCheckingUpdates || isUpdatingApp || isUninstalling
+    }
 
     var body: some View {
         GeometryReader { proxy in
@@ -169,27 +305,29 @@ private struct AppChromeView: View {
                 HStack(spacing: 13.5) {
                     LiquidIconButtonGroup(horizontalPadding: 5) {
                         LiquidIconButton(
-                            systemImage: "xmark.octagon",
-                            help: "扫描 App",
-                            isDisabled: isScanning,
-                            action: scan
-                        )
-
-                        LiquidIconButton(
                             systemImage: "info.circle",
-                            help: "检查更新",
-                            isDisabled: isScanning || isCheckingUpdates || !canCheckUpdates,
-                            action: checkUpdates
+                            help: "App 信息",
+                            isDisabled: isBusy || !hasSelection,
+                            action: showInfo
                         )
-                    }
 
-                    LiquidIconButtonGroup(horizontalPadding: 3) {
+                        LiquidSplitMenuButton(
+                            systemImage: "arrow.clockwise.circle",
+                            help: "检查更新",
+                            isPrimaryDisabled: isBusy || !hasSelection,
+                            isMenuDisabled: isBusy || !canCheckUpdates,
+                            primaryAction: checkSelectedAppUpdates,
+                            menuItems: [
+                                LiquidSplitMenuButton.Item(title: "检查所有更新", action: checkAllUpdates),
+                                LiquidSplitMenuButton.Item(title: "更新所有", action: updateAll),
+                            ]
+                        )
+
                         LiquidIconButton(
-                            systemImage: "ellipsis.circle",
-                            trailingSystemImage: "chevron.down",
-                            help: "更多操作",
-                            isDisabled: false,
-                            action: {}
+                            systemImage: "trash",
+                            help: "卸载",
+                            isDisabled: isBusy || !hasSelection,
+                            action: uninstall
                         )
                     }
 
@@ -221,6 +359,460 @@ private struct AppChromeView: View {
     }
 }
 
+private struct AppInfoDialog: View {
+    let app: AppRecord
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            HStack(spacing: 12) {
+                AppIconImage(path: app.path)
+                    .frame(width: 48, height: 48)
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(app.name)
+                        .font(.system(size: 18, weight: .semibold))
+                    Text(app.bundleIdentifier ?? "无 Bundle ID")
+                        .font(.system(size: 12))
+                        .foregroundStyle(.secondary)
+                        .textSelection(.enabled)
+                }
+            }
+
+            Grid(alignment: .leading, horizontalSpacing: 14, verticalSpacing: 9) {
+                AppInfoRow(title: "来源", value: app.installSource.shortDisplayName)
+                AppInfoRow(title: "当前版本", value: app.currentVersionDisplayText)
+                AppInfoRow(title: "最新版本", value: app.latestVersionDisplayText)
+                AppInfoRow(title: "大小", value: ByteCountFormatter.string(fromByteCount: app.sizeBytes, countStyle: .file))
+                AppInfoRow(title: "路径", value: app.path.path)
+            }
+
+            HStack {
+                Spacer()
+                Button("好") {
+                    dismiss()
+                }
+                .keyboardShortcut(.defaultAction)
+            }
+        }
+        .padding(22)
+        .frame(width: 520)
+    }
+}
+
+private struct AppInfoRow: View {
+    let title: String
+    let value: String
+
+    var body: some View {
+        GridRow {
+            Text(title)
+                .foregroundStyle(.secondary)
+            Text(value)
+                .textSelection(.enabled)
+                .lineLimit(2)
+        }
+        .font(.system(size: 13))
+    }
+}
+
+private struct SelfUpdateURLDialog: View {
+    let app: AppRecord
+    let save: (URL) async -> Void
+    @Environment(\.dismiss) private var dismiss
+    @State private var urlText: String
+    @State private var validationMessage: String?
+
+    init(app: AppRecord, save: @escaping (URL) async -> Void) {
+        self.app = app
+        self.save = save
+        switch app.updateStatus {
+        case let .needsOfficialWebsiteConfirmation(candidateURL):
+            _urlText = State(initialValue: candidateURL.absoluteString)
+        default:
+            _urlText = State(initialValue: "")
+        }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text(title)
+                .font(.system(size: 15, weight: .semibold))
+
+            Text(app.name)
+                .font(.system(size: 12))
+                .foregroundStyle(.secondary)
+
+            TextField("https://example.com/download", text: $urlText)
+                .textFieldStyle(.roundedBorder)
+                .font(.system(size: 13))
+
+            if let validationMessage {
+                Text(validationMessage)
+                    .font(.system(size: 12))
+                    .foregroundStyle(.red)
+            }
+
+            HStack {
+                Spacer()
+                Button("取消") {
+                    dismiss()
+                }
+                Button("保存并检查") {
+                    guard let url = normalizedURL else {
+                        validationMessage = "请输入有效的网址"
+                        return
+                    }
+
+                    Task {
+                        await save(url)
+                        dismiss()
+                    }
+                }
+                .keyboardShortcut(.defaultAction)
+            }
+        }
+        .padding(20)
+        .frame(width: 460)
+    }
+
+    private var title: String {
+        switch app.updateStatus {
+        case .needsOfficialWebsiteConfirmation:
+            return "确认官网 / 检查更新网址"
+        default:
+            return "手动输入检查更新网址"
+        }
+    }
+
+    private var normalizedURL: URL? {
+        let trimmedText = urlText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedText.isEmpty else {
+            return nil
+        }
+
+        let urlTextWithScheme = trimmedText.contains("://") ? trimmedText : "https://\(trimmedText)"
+        guard let url = URL(string: urlTextWithScheme),
+              let scheme = url.scheme?.lowercased(),
+              ["http", "https"].contains(scheme),
+              url.host(percentEncoded: false) != nil else {
+            return nil
+        }
+        return url
+    }
+}
+
+private struct IgnoredAppsList: View {
+    let ignoredApps: [IgnoredAppRecord]
+    @Binding var selectedIgnoredAppPath: URL?
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 0) {
+                Text("名称")
+                    .frame(width: 180, alignment: .leading)
+                Text("来源")
+                    .frame(width: 80, alignment: .leading)
+                Text("路径")
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .font(.system(size: 12))
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, 10)
+            .frame(height: 26)
+            .background(Color.primary.opacity(0.04))
+
+            List(selection: $selectedIgnoredAppPath) {
+                ForEach(ignoredApps) { app in
+                    HStack(spacing: 0) {
+                        Text(app.name)
+                            .frame(width: 180, alignment: .leading)
+                        Text(app.sourceName)
+                            .frame(width: 80, alignment: .leading)
+                            .foregroundStyle(.secondary)
+                        Text(app.path.path)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
+                    .font(.system(size: 12))
+                    .tag(app.path)
+                }
+            }
+            .listStyle(.plain)
+        }
+        .frame(minHeight: 180)
+        .overlay {
+            RoundedRectangle(cornerRadius: 6)
+                .stroke(Color.primary.opacity(0.12), lineWidth: 1)
+        }
+    }
+}
+
+private struct UninstallReviewDialog: View {
+    let app: AppRecord
+    let remove: ([UninstallCandidate]) async -> Void
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var candidates: [UninstallCandidate] = []
+    @State private var selectedCandidateIDs = Set<UninstallCandidate.ID>()
+    @State private var isLoading = true
+    @State private var isRemoving = false
+    @State private var errorMessage: String?
+
+    private var selectedCandidates: [UninstallCandidate] {
+        candidates.filter { selectedCandidateIDs.contains($0.id) }
+    }
+
+    private var selectedSizeBytes: Int64 {
+        selectedCandidates.reduce(0) { $0 + $1.sizeBytes }
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            header
+
+            Divider()
+
+            ZStack {
+                candidateList
+
+                if isLoading {
+                    ProgressView("正在查找关联文件...")
+                        .font(.system(size: 12))
+                        .padding(16)
+                        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8))
+                }
+            }
+            .frame(height: 330)
+
+            Divider()
+
+            footer
+        }
+        .frame(width: 640)
+        .task {
+            await loadCandidates()
+        }
+        .alert(
+            "查找失败",
+            isPresented: Binding(
+                get: { errorMessage != nil },
+                set: { isPresented in
+                    if !isPresented {
+                        errorMessage = nil
+                    }
+                }
+            )
+        ) {
+            Button("好", role: .cancel) {}
+        } message: {
+            Text(errorMessage ?? "未知错误")
+        }
+    }
+
+    private var header: some View {
+        HStack(alignment: .center, spacing: 9) {
+            Text("\(selectedCandidates.count) files were found")
+                .font(.system(size: 17, weight: .regular))
+
+            Text("·")
+                .font(.system(size: 15))
+                .foregroundStyle(.secondary)
+
+            Text(ByteCountFormatter.string(fromByteCount: selectedSizeBytes, countStyle: .file))
+                .font(.system(size: 17, weight: .regular))
+                .foregroundStyle(.blue)
+
+            Spacer()
+
+            Button {
+            } label: {
+                Image(systemName: "questionmark.circle")
+                    .font(.system(size: 21, weight: .regular))
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(.primary)
+            .help("帮助")
+        }
+        .padding(.horizontal, 20)
+        .padding(.vertical, 12)
+    }
+
+    private var candidateList: some View {
+        ScrollView {
+            LazyVStack(spacing: 8) {
+                ForEach(candidates) { candidate in
+                    UninstallCandidateRow(
+                        candidate: candidate,
+                        isSelected: Binding(
+                            get: { selectedCandidateIDs.contains(candidate.id) },
+                            set: { isSelected in
+                                if isSelected {
+                                    selectedCandidateIDs.insert(candidate.id)
+                                } else if !candidate.isRequired {
+                                    selectedCandidateIDs.remove(candidate.id)
+                                }
+                            }
+                        )
+                    )
+                }
+
+                ForEach(0..<3, id: \.self) { _ in
+                    RoundedRectangle(cornerRadius: 6)
+                        .fill(Color.primary.opacity(0.045))
+                        .frame(height: 42)
+                }
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 12)
+        }
+    }
+
+    private var footer: some View {
+        HStack {
+            Spacer()
+
+            Button("Cancel") {
+                dismiss()
+            }
+            .font(.system(size: 13))
+            .keyboardShortcut(.cancelAction)
+            .disabled(isRemoving)
+
+            Button {
+                Task {
+                    isRemoving = true
+                    await remove(selectedCandidates)
+                    isRemoving = false
+                }
+            } label: {
+                if isRemoving {
+                    ProgressView()
+                        .controlSize(.small)
+                        .frame(width: 68)
+                } else {
+                    Text("Remove")
+                        .font(.system(size: 13))
+                        .frame(width: 68)
+                }
+            }
+            .keyboardShortcut(.defaultAction)
+            .disabled(isRemoving || selectedCandidates.isEmpty)
+        }
+        .padding(.horizontal, 20)
+        .padding(.vertical, 12)
+        .background(Color.primary.opacity(0.035))
+    }
+
+    private func loadCandidates() async {
+        isLoading = true
+        errorMessage = nil
+
+        do {
+            let app = self.app
+            let loadedCandidates = try await Task.detached(priority: .userInitiated) {
+                try UninstallCandidateFinder().findCandidates(for: app)
+            }.value
+
+            candidates = loadedCandidates
+            selectedCandidateIDs = Set(loadedCandidates.map(\.id))
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+
+        isLoading = false
+    }
+}
+
+private struct UninstallCandidateRow: View {
+    let candidate: UninstallCandidate
+    @Binding var isSelected: Bool
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Toggle("", isOn: $isSelected)
+                .labelsHidden()
+                .toggleStyle(.checkbox)
+                .disabled(candidate.isRequired)
+                .frame(width: 22)
+
+            CandidateIcon(candidate: candidate)
+                .frame(width: 28, height: 28)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(candidate.name)
+                    .font(.system(size: 13, weight: .medium))
+                    .lineLimit(1)
+
+                Text(displayPath(candidate.url))
+                    .font(.system(size: 11.5))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            }
+
+            Spacer(minLength: 10)
+
+            Text(ByteCountFormatter.string(fromByteCount: candidate.sizeBytes, countStyle: .file))
+                .font(.system(size: 12.5))
+                .foregroundStyle(.secondary)
+                .frame(minWidth: 68, alignment: .trailing)
+
+            Button {
+                NSWorkspace.shared.activateFileViewerSelecting([candidate.url])
+            } label: {
+                Image(systemName: "magnifyingglass.circle.fill")
+                    .font(.system(size: 15))
+                    .foregroundStyle(.secondary)
+            }
+            .buttonStyle(.plain)
+            .help("在 Finder 中显示")
+        }
+        .padding(.horizontal, 14)
+        .frame(height: 42)
+        .background(Color.primary.opacity(0.045), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+    }
+
+    private func displayPath(_ url: URL) -> String {
+        let homePath = FileManager.default.homeDirectoryForCurrentUser.path
+        let path = url.path
+        guard path.hasPrefix(homePath) else {
+            return path
+        }
+
+        return "~" + path.dropFirst(homePath.count)
+    }
+}
+
+private struct CandidateIcon: NSViewRepresentable {
+    let candidate: UninstallCandidate
+
+    func makeNSView(context: Context) -> NSImageView {
+        let imageView = NSImageView()
+        imageView.imageScaling = .scaleProportionallyUpOrDown
+        return imageView
+    }
+
+    func updateNSView(_ imageView: NSImageView, context: Context) {
+        imageView.image = NSWorkspace.shared.icon(forFile: candidate.url.path)
+    }
+}
+
+private struct AppIconImage: NSViewRepresentable {
+    let path: URL
+
+    func makeNSView(context: Context) -> NSImageView {
+        let imageView = NSImageView()
+        imageView.imageScaling = .scaleProportionallyUpOrDown
+        return imageView
+    }
+
+    func updateNSView(_ imageView: NSImageView, context: Context) {
+        imageView.image = NSWorkspace.shared.icon(forFile: path.path)
+    }
+}
+
 private struct LiquidIconButtonGroup<Content: View>: View {
     let horizontalPadding: CGFloat
     @ViewBuilder var content: () -> Content
@@ -248,7 +840,7 @@ private struct AppToolbarTitleView: View {
             Text("AppMan")
                 .font(.system(size: 14.5, weight: .bold))
                 .foregroundStyle(.primary)
-            Text(selectedSection == .apps ? "所有 App" : "设置")
+            Text(selectedSection == .apps ? "所有应用程序" : "设置")
                 .font(.system(size: 12.5))
                 .foregroundStyle(.secondary)
         }
@@ -261,13 +853,44 @@ private struct LiquidIconButton: View {
     var trailingSystemImage: String?
     let help: String
     let isDisabled: Bool
-    let action: () async -> Void
+    let action: () -> Void
 
-    var body: some View {
-        Button {
+    init(
+        systemImage: String,
+        trailingSystemImage: String? = nil,
+        help: String,
+        isDisabled: Bool,
+        action: @escaping () -> Void
+    ) {
+        self.systemImage = systemImage
+        self.trailingSystemImage = trailingSystemImage
+        self.help = help
+        self.isDisabled = isDisabled
+        self.action = action
+    }
+
+    init(
+        systemImage: String,
+        trailingSystemImage: String? = nil,
+        help: String,
+        isDisabled: Bool,
+        action: @escaping () async -> Void
+    ) {
+        self.init(
+            systemImage: systemImage,
+            trailingSystemImage: trailingSystemImage,
+            help: help,
+            isDisabled: isDisabled
+        ) {
             Task {
                 await action()
             }
+        }
+    }
+
+    var body: some View {
+        Button {
+            action()
         } label: {
             HStack(spacing: 4) {
                 Image(systemName: systemImage)
@@ -285,6 +908,58 @@ private struct LiquidIconButton: View {
         .foregroundStyle(isDisabled ? .tertiary : .primary)
         .disabled(isDisabled)
         .help(help)
+    }
+}
+
+private struct LiquidSplitMenuButton: View {
+    struct Item: Identifiable {
+        let id = UUID()
+        let title: String
+        let action: () async -> Void
+    }
+
+    let systemImage: String
+    let help: String
+    let isPrimaryDisabled: Bool
+    let isMenuDisabled: Bool
+    let primaryAction: () async -> Void
+    let menuItems: [Item]
+
+    var body: some View {
+        HStack(spacing: 0) {
+            Button {
+                Task {
+                    await primaryAction()
+                }
+            } label: {
+                Image(systemName: systemImage)
+                    .font(.system(size: 16.5, weight: .regular))
+                    .frame(width: 30, height: 30)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(isPrimaryDisabled ? .tertiary : .primary)
+            .disabled(isPrimaryDisabled)
+            .help(help)
+
+            Menu {
+                ForEach(menuItems) { item in
+                    Button(item.title) {
+                        Task {
+                            await item.action()
+                        }
+                    }
+                }
+            } label: {
+                Color.clear
+                    .frame(width: 8, height: 30)
+                    .contentShape(Rectangle())
+            }
+            .menuStyle(.borderlessButton)
+            .foregroundStyle(isMenuDisabled ? .tertiary : .primary)
+            .disabled(isMenuDisabled)
+            .help("更多更新操作")
+        }
     }
 }
 
@@ -495,6 +1170,8 @@ private struct WindowChromeConfigurator<ChromeContent: View>: NSViewRepresentabl
     static func dismantleNSView(_ nsView: NSView, coordinator: Coordinator) {
         coordinator.hostingView?.removeFromSuperview()
         coordinator.hostingView = nil
+        coordinator.trafficLightOverlay?.removeFromSuperview()
+        coordinator.trafficLightOverlay = nil
     }
 
     private func configure(window: NSWindow?, context: Context) {
@@ -504,6 +1181,7 @@ private struct WindowChromeConfigurator<ChromeContent: View>: NSViewRepresentabl
 
         window.titlebarAppearsTransparent = true
         window.titleVisibility = .hidden
+        window.styleMask.insert([.titled, .closable, .miniaturizable, .resizable])
         window.styleMask.insert(.fullSizeContentView)
         window.toolbar = nil
         window.toolbarStyle = .unifiedCompact
@@ -511,6 +1189,7 @@ private struct WindowChromeConfigurator<ChromeContent: View>: NSViewRepresentabl
         window.appearance = NSAppearance(named: .aqua)
         window.backgroundColor = .clear
         window.isOpaque = false
+        window.acceptsMouseMovedEvents = true
 
         installChrome(in: window, context: context)
 
@@ -546,30 +1225,7 @@ private struct WindowChromeConfigurator<ChromeContent: View>: NSViewRepresentabl
         }
         frameView.addSubview(hostingView, positioned: .above, relativeTo: nil)
 
-        let trafficLightOverlay: TrafficLightOverlayView
-        if let existingOverlay = context.coordinator.trafficLightOverlay {
-            trafficLightOverlay = existingOverlay
-        } else {
-            trafficLightOverlay = TrafficLightOverlayView(frame: .zero)
-            trafficLightOverlay.identifier = NSUserInterfaceItemIdentifier("AppManTrafficLightOverlayView")
-            trafficLightOverlay.autoresizingMask = [.maxXMargin, .minYMargin]
-            context.coordinator.trafficLightOverlay = trafficLightOverlay
-        }
-
-        if trafficLightOverlay.superview === frameView {
-            trafficLightOverlay.removeFromSuperview()
-        }
-        frameView.addSubview(trafficLightOverlay, positioned: .above, relativeTo: hostingView)
-
-        for buttonType in [NSWindow.ButtonType.closeButton, .miniaturizeButton, .zoomButton] {
-            guard let button = window.standardWindowButton(buttonType) else {
-                continue
-            }
-
-            button.alphaValue = 0
-            button.isHidden = true
-            button.frame.origin = NSPoint(x: -1000, y: -1000)
-        }
+        context.coordinator.trafficLightOverlay?.removeFromSuperview()
 
         let frameBounds = frameView.bounds
         hostingView.frame = NSRect(
@@ -578,17 +1234,70 @@ private struct WindowChromeConfigurator<ChromeContent: View>: NSViewRepresentabl
             width: frameBounds.width,
             height: chromeHeight
         )
-        context.coordinator.trafficLightOverlay?.frame = NSRect(
+        positionSystemTrafficLights(in: window, above: hostingView)
+        installTrafficLightGlyphOverlay(in: frameView, context: context)
+
+    }
+
+    private func positionSystemTrafficLights(in window: NSWindow, above hostingView: NSView) {
+        let placements: [(NSWindow.ButtonType, CGFloat)] = [
+            (.closeButton, 19),
+            (.miniaturizeButton, 42),
+            (.zoomButton, 65),
+        ]
+
+        for (buttonType, originX) in placements {
+            guard let button = window.standardWindowButton(buttonType),
+                  let frameView = window.contentView?.superview else {
+                continue
+            }
+
+            button.isHidden = false
+            button.isEnabled = true
+            button.alphaValue = 1
+            button.refusesFirstResponder = true
+            button.autoresizingMask = [.maxXMargin, .minYMargin]
+            if button.superview !== frameView {
+                button.removeFromSuperview()
+                frameView.addSubview(button)
+            }
+            button.frame.origin = NSPoint(
+                x: originX,
+                y: max(0, frameView.bounds.height - 31)
+            )
+            frameView.addSubview(button, positioned: .above, relativeTo: nil)
+        }
+    }
+
+    private func installTrafficLightGlyphOverlay(in frameView: NSView, context: Context) {
+        let overlay: TrafficLightGlyphOverlayView
+        if let existingOverlay = context.coordinator.trafficLightOverlay {
+            overlay = existingOverlay
+        } else {
+            overlay = TrafficLightGlyphOverlayView(frame: .zero)
+            overlay.identifier = NSUserInterfaceItemIdentifier("AppManTrafficLightGlyphOverlayView")
+            overlay.autoresizingMask = [.maxXMargin, .minYMargin]
+            context.coordinator.trafficLightOverlay = overlay
+        }
+
+        if overlay.superview !== frameView {
+            overlay.removeFromSuperview()
+            frameView.addSubview(overlay, positioned: .above, relativeTo: nil)
+        } else {
+            frameView.addSubview(overlay, positioned: .above, relativeTo: nil)
+        }
+
+        overlay.frame = NSRect(
             x: 0,
-            y: max(0, frameBounds.height - 40),
-            width: 170,
+            y: max(0, frameView.bounds.height - 40),
+            width: 96,
             height: 40
         )
     }
 
     final class Coordinator {
         var hostingView: ChromeHostingView?
-        var trafficLightOverlay: TrafficLightOverlayView?
+        var trafficLightOverlay: TrafficLightGlyphOverlayView?
     }
 
     final class ChromeHostingView: NSHostingView<AnyView> {
@@ -597,61 +1306,183 @@ private struct WindowChromeConfigurator<ChromeContent: View>: NSViewRepresentabl
         }
     }
 
-    final class TrafficLightOverlayView: NSView {
+    final class TrafficLightGlyphOverlayView: NSView {
+        private var isHoveringLights = false
+        private var localMouseMonitor: Any?
+        private var globalMouseMonitor: Any?
+
         override var isFlipped: Bool {
             true
         }
 
-        override func hitTest(_ point: NSPoint) -> NSView? {
-            light(at: point) == nil ? nil : self
+        override var mouseDownCanMoveWindow: Bool {
+            false
         }
 
-        override func mouseDown(with event: NSEvent) {
-            let point = convert(event.locationInWindow, from: nil)
-            switch light(at: point) {
-            case .close:
-                window?.performClose(nil)
-            case .minimize:
-                window?.miniaturize(nil)
-            case .zoom:
-                window?.zoom(nil)
-            case nil:
-                break
+        override func hitTest(_ point: NSPoint) -> NSView? {
+            nil
+        }
+
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            installMouseMonitors()
+        }
+
+        deinit {
+            removeMouseMonitors()
+        }
+
+        override func acceptsFirstMouse(for event: NSEvent?) -> Bool {
+            true
+        }
+
+        override func updateTrackingAreas() {
+            super.updateTrackingAreas()
+
+            for trackingArea in trackingAreas {
+                removeTrackingArea(trackingArea)
             }
+
+            addTrackingArea(NSTrackingArea(
+                rect: bounds,
+                options: [.mouseEnteredAndExited, .mouseMoved, .activeAlways, .inVisibleRect],
+                owner: self,
+                userInfo: nil
+            ))
+        }
+
+        override func mouseEntered(with event: NSEvent) {
+            updateHoverState(with: event)
+        }
+
+        override func mouseExited(with event: NSEvent) {
+            isHoveringLights = false
+            needsDisplay = true
+        }
+
+        override func mouseMoved(with event: NSEvent) {
+            updateHoverState(with: event)
         }
 
         override func draw(_ dirtyRect: NSRect) {
-            let lights: [(NSColor, CGFloat)] = [
-                (NSColor(calibratedRed: 1.0, green: 0.33, blue: 0.35, alpha: 1.0), Light.close.centerX),
-                (NSColor(calibratedRed: 1.0, green: 0.78, blue: 0.08, alpha: 1.0), Light.minimize.centerX),
-                (NSColor(calibratedRed: 0.16, green: 0.78, blue: 0.30, alpha: 1.0), Light.zoom.centerX),
-            ]
-
-            for (color, centerX) in lights {
-                let rect = NSRect(x: centerX - 7, y: Light.centerY - 7, width: 14, height: 14)
-                color.setFill()
-                NSBezierPath(ovalIn: rect).fill()
-                NSColor.black.withAlphaComponent(0.12).setStroke()
-                let strokePath = NSBezierPath(ovalIn: rect.insetBy(dx: 0.5, dy: 0.5))
-                strokePath.lineWidth = 0.7
-                strokePath.stroke()
+            if isHoveringLights {
+                drawHoverSymbols()
             }
         }
 
         private func light(at point: NSPoint) -> Light? {
-            Light.allCases.first { light in
+            if let circularHit = Light.allCases.first(where: { light in
                 let dx = point.x - light.centerX
                 let dy = point.y - Light.centerY
-                return dx * dx + dy * dy <= 81
+                return dx * dx + dy * dy <= 144
+            }) {
+                return circularHit
+            }
+
+            guard lightsHitBounds.contains(point) else {
+                return nil
+            }
+
+            switch point.x {
+            case ..<37.5:
+                return .close
+            case ..<60.5:
+                return .minimize
+            default:
+                return .zoom
             }
         }
 
-        private enum Light: CaseIterable {
+        private var lightsBounds: NSRect {
+            NSRect(x: Light.close.centerX - 9, y: Light.centerY - 9, width: Light.zoom.centerX - Light.close.centerX + 18, height: 18)
+        }
+
+        private var lightsHitBounds: NSRect {
+            NSRect(x: 10, y: Light.centerY - 18, width: 82, height: 36)
+        }
+
+        private func installMouseMonitors() {
+            removeMouseMonitors()
+
+            localMouseMonitor = NSEvent.addLocalMonitorForEvents(matching: [.mouseMoved, .leftMouseDragged]) { [weak self] event in
+                self?.updateHoverState(with: event)
+                return event
+            }
+
+            globalMouseMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.mouseMoved, .leftMouseDragged]) { [weak self] event in
+                self?.updateHoverState(with: event)
+            }
+        }
+
+        private func removeMouseMonitors() {
+            if let localMouseMonitor {
+                NSEvent.removeMonitor(localMouseMonitor)
+                self.localMouseMonitor = nil
+            }
+
+            if let globalMouseMonitor {
+                NSEvent.removeMonitor(globalMouseMonitor)
+                self.globalMouseMonitor = nil
+            }
+        }
+
+        private func updateHoverState(with event: NSEvent) {
+            guard let window else {
+                setHoveringLights(false)
+                return
+            }
+
+            let windowPoint: NSPoint
+            if event.window === window {
+                windowPoint = event.locationInWindow
+            } else {
+                windowPoint = window.convertPoint(fromScreen: event.locationInWindow)
+            }
+
+            setHoveringLights(lightsBounds.contains(convert(windowPoint, from: nil)))
+        }
+
+        private func setHoveringLights(_ isHovering: Bool) {
+            guard isHoveringLights != isHovering else {
+                return
+            }
+
+            isHoveringLights = isHovering
+            needsDisplay = true
+        }
+
+        private func drawHoverSymbols() {
+            NSColor.black.withAlphaComponent(0.58).setStroke()
+
+            let closePath = NSBezierPath()
+            closePath.lineWidth = 1.2
+            closePath.move(to: NSPoint(x: Light.close.centerX - 3, y: Light.centerY - 3))
+            closePath.line(to: NSPoint(x: Light.close.centerX + 3, y: Light.centerY + 3))
+            closePath.move(to: NSPoint(x: Light.close.centerX + 3, y: Light.centerY - 3))
+            closePath.line(to: NSPoint(x: Light.close.centerX - 3, y: Light.centerY + 3))
+            closePath.stroke()
+
+            let minimizePath = NSBezierPath()
+            minimizePath.lineWidth = 1.4
+            minimizePath.move(to: NSPoint(x: Light.minimize.centerX - 4, y: Light.centerY))
+            minimizePath.line(to: NSPoint(x: Light.minimize.centerX + 4, y: Light.centerY))
+            minimizePath.stroke()
+
+            let zoomPath = NSBezierPath()
+            zoomPath.lineWidth = 1.35
+            zoomPath.move(to: NSPoint(x: Light.zoom.centerX - 4, y: Light.centerY))
+            zoomPath.line(to: NSPoint(x: Light.zoom.centerX + 4, y: Light.centerY))
+            zoomPath.move(to: NSPoint(x: Light.zoom.centerX, y: Light.centerY - 4))
+            zoomPath.line(to: NSPoint(x: Light.zoom.centerX, y: Light.centerY + 4))
+            zoomPath.stroke()
+        }
+
+        enum Light: Int, CaseIterable {
             case close
             case minimize
             case zoom
 
-            static var centerY: CGFloat { 26 }
+            static var centerY: CGFloat { 24 }
 
             var centerX: CGFloat {
                 switch self {
@@ -663,8 +1494,13 @@ private struct WindowChromeConfigurator<ChromeContent: View>: NSViewRepresentabl
                     return 72
                 }
             }
+
+            var hitRect: NSRect {
+                NSRect(x: centerX - 10, y: Light.centerY - 10, width: 20, height: 20)
+            }
         }
     }
+
 }
 
 private enum AppUISnapshotter {
@@ -834,6 +1670,9 @@ private struct AppCatalogView: View {
     let apps: [AppRecord]
     @Binding var selectedAppID: AppRecord.ID?
     @Binding var searchText: String
+    let updateApp: (AppRecord) async -> Void
+    let editSelfUpdateURL: (AppRecord) -> Void
+    let ignoreUpdates: (AppRecord) -> Void
 
     private var filteredApps: [AppRecord] {
         let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -851,51 +1690,13 @@ private struct AppCatalogView: View {
             apps: filteredApps,
             selectedAppID: $selectedAppID,
             searchText: $searchText,
-            topInset: AppLayout.tableTopInset
+            topInset: AppLayout.tableTopInset,
+            updateApp: updateApp,
+            editSelfUpdateURL: editSelfUpdateURL,
+            ignoreUpdates: ignoreUpdates
         )
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color.white)
-        .ignoresSafeArea(.container, edges: .top)
-    }
-
-    private func currentVersionText(for app: AppRecord) -> String {
-        let shortVersion = normalized(app.shortVersion)
-        let buildVersion = normalized(app.buildVersion)
-
-        switch (shortVersion, buildVersion) {
-        case let (short?, build?):
-            return "\(short) (\(build))"
-        case let (short?, nil):
-            return short
-        case let (nil, build?):
-            return build
-        case (nil, nil):
-            return "未知"
-        }
-    }
-
-    private func latestVersionText(for app: AppRecord) -> String {
-        switch app.updateStatus {
-        case .notChecked:
-            return "未检查"
-        case .upToDate:
-            return currentVersionText(for: app)
-        case let .updateAvailable(_, latestVersion):
-            return latestVersion
-        case .unsupported:
-            return "不支持"
-        case .checkFailed:
-            return "检查失败"
-        }
-    }
-
-    private func normalized(_ value: String?) -> String? {
-        guard let value else {
-            return nil
-        }
-
-        let trimmedValue = value.trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmedValue.isEmpty ? nil : trimmedValue
     }
 }
 
@@ -904,9 +1705,17 @@ private struct AppCatalogTableView: NSViewRepresentable {
     @Binding var selectedAppID: AppRecord.ID?
     @Binding var searchText: String
     let topInset: CGFloat
+    let updateApp: (AppRecord) async -> Void
+    let editSelfUpdateURL: (AppRecord) -> Void
+    let ignoreUpdates: (AppRecord) -> Void
 
     func makeCoordinator() -> Coordinator {
-        Coordinator(selectedAppID: $selectedAppID)
+        Coordinator(
+            selectedAppID: $selectedAppID,
+            updateApp: updateApp,
+            editSelfUpdateURL: editSelfUpdateURL,
+            ignoreUpdates: ignoreUpdates
+        )
     }
 
     func makeNSView(context: Context) -> NSView {
@@ -931,7 +1740,7 @@ private struct AppCatalogTableView: NSViewRepresentable {
         documentView.translatesAutoresizingMaskIntoConstraints = false
         documentView.appearance = NSAppearance(named: .aqua)
 
-        let tableView = NSTableView()
+        let tableView = AppCatalogNSTableView()
         tableView.headerView = nil
         tableView.appearance = NSAppearance(named: .aqua)
         tableView.backgroundColor = .clear
@@ -942,6 +1751,12 @@ private struct AppCatalogTableView: NSViewRepresentable {
         tableView.allowsMultipleSelection = false
         tableView.dataSource = context.coordinator
         tableView.delegate = context.coordinator
+        tableView.contextMenuProvider = { [weak coordinator = context.coordinator, weak tableView] row in
+            guard let tableView else {
+                return nil
+            }
+            return coordinator?.contextMenu(forRow: row, in: tableView)
+        }
 
         for column in Self.makeColumns() {
             tableView.addTableColumn(column)
@@ -977,6 +1792,9 @@ private struct AppCatalogTableView: NSViewRepresentable {
         scrollView.scrollerInsets = NSEdgeInsets(top: topInset, left: 0, bottom: 0, right: 0)
         context.coordinator.apps = apps
         context.coordinator.selectedAppID = $selectedAppID
+        context.coordinator.updateApp = updateApp
+        context.coordinator.editSelfUpdateURLHandler = editSelfUpdateURL
+        context.coordinator.ignoreUpdates = ignoreUpdates
         context.coordinator.tableView?.reloadData()
         context.coordinator.updateTableFrame(topInset: topInset)
         context.coordinator.syncSelection()
@@ -1002,12 +1820,23 @@ private struct AppCatalogTableView: NSViewRepresentable {
     final class Coordinator: NSObject, NSTableViewDataSource, NSTableViewDelegate {
         var apps: [AppRecord] = []
         var selectedAppID: Binding<AppRecord.ID?>
+        var updateApp: (AppRecord) async -> Void
+        var editSelfUpdateURLHandler: (AppRecord) -> Void
+        var ignoreUpdates: (AppRecord) -> Void
         weak var scrollView: NSScrollView?
         weak var documentView: AppTableDocumentView?
         weak var tableView: NSTableView?
 
-        init(selectedAppID: Binding<AppRecord.ID?>) {
+        init(
+            selectedAppID: Binding<AppRecord.ID?>,
+            updateApp: @escaping (AppRecord) async -> Void,
+            editSelfUpdateURL: @escaping (AppRecord) -> Void,
+            ignoreUpdates: @escaping (AppRecord) -> Void
+        ) {
             self.selectedAppID = selectedAppID
+            self.updateApp = updateApp
+            self.editSelfUpdateURLHandler = editSelfUpdateURL
+            self.ignoreUpdates = ignoreUpdates
         }
 
         func numberOfRows(in tableView: NSTableView) -> Int {
@@ -1029,6 +1858,32 @@ private struct AppCatalogTableView: NSViewRepresentable {
             return rowView
         }
 
+        func tableView(_ tableView: NSTableView, menuForRows rows: IndexSet) -> NSMenu? {
+            guard let row = rows.first else {
+                return nil
+            }
+
+            return contextMenu(forRow: row, in: tableView)
+        }
+
+        func contextMenu(forRow row: Int, in tableView: NSTableView) -> NSMenu? {
+            guard apps.indices.contains(row) else {
+                return nil
+            }
+
+            let app = apps[row]
+            selectedAppID.wrappedValue = app.id
+            tableView.selectRowIndexes(IndexSet(integer: row), byExtendingSelection: false)
+
+            let menu = NSMenu()
+            let ignoreItem = NSMenuItem(title: "忽略更新检查", action: #selector(ignoreSelectedApp(_:)), keyEquivalent: "")
+            ignoreItem.target = self
+            ignoreItem.representedObject = app.path
+            ignoreItem.isEnabled = app.updateStatus != .ignored
+            menu.addItem(ignoreItem)
+            return menu
+        }
+
         func tableView(_ tableView: NSTableView, viewFor tableColumn: NSTableColumn?, row: Int) -> NSView? {
             guard apps.indices.contains(row), let columnID = tableColumn?.identifier.rawValue else {
                 return nil
@@ -1041,11 +1896,21 @@ private struct AppCatalogTableView: NSViewRepresentable {
                 cell.configure(app: app)
                 return cell
             case "source":
-                return textCell(Self.sourceText(for: app.installSource))
+                return textCell(app.installSource.shortDisplayName)
             case "currentVersion":
-                return textCell(Self.currentVersionText(for: app))
+                return textCell(app.currentVersionDisplayText)
             case "latestVersion":
-                return textCell(Self.latestVersionText(for: app), color: Self.latestVersionColor(for: app.updateStatus))
+                if app.updateStatus.requiresSelfUpdateURLInput {
+                    return selfUpdateLinkCell(app.latestVersionDisplayText, app: app)
+                }
+                if app.updateStatus.canRunUpdateAction {
+                    return updateChannelLinkCell(
+                        app.latestVersionDisplayText,
+                        app: app,
+                        color: Self.latestVersionColor(for: app.updateStatus)
+                    )
+                }
+                return textCell(app.latestVersionDisplayText, color: Self.latestVersionColor(for: app.updateStatus))
             default:
                 return nil
             }
@@ -1082,6 +1947,37 @@ private struct AppCatalogTableView: NSViewRepresentable {
             tableView.frame = NSRect(x: 0, y: topInset, width: contentWidth, height: max(rowsHeight, visibleHeight - topInset))
         }
 
+        @objc private func ignoreSelectedApp(_ sender: NSMenuItem) {
+            guard let appPath = sender.representedObject as? URL,
+                  let app = apps.first(where: { $0.path == appPath }) else {
+                return
+            }
+
+            ignoreUpdates(app)
+        }
+
+        @objc private func editSelfUpdateURL(_ sender: NSButton) {
+            guard let appPath = (sender as? SelfUpdateLinkButton)?.appPath,
+                  let app = apps.first(where: { $0.path == appPath }) else {
+                return
+            }
+
+            selectedAppID.wrappedValue = app.id
+            editSelfUpdateURLHandler(app)
+        }
+
+        @objc private func updateSelectedApp(_ sender: NSButton) {
+            guard let appPath = (sender as? UpdateChannelLinkButton)?.appPath,
+                  let app = apps.first(where: { $0.path == appPath }) else {
+                return
+            }
+
+            selectedAppID.wrappedValue = app.id
+            Task {
+                await updateApp(app)
+            }
+        }
+
         private func textCell(_ text: String, color: NSColor = .labelColor) -> NSTableCellView {
             let cell = NSTableCellView()
             let textField = NSTextField(labelWithString: text)
@@ -1098,46 +1994,42 @@ private struct AppCatalogTableView: NSViewRepresentable {
             return cell
         }
 
-        private static func sourceText(for installSource: InstallSource) -> String {
-            switch installSource {
-            case .macAppStore:
-                return "MAS"
-            case .homebrewCask:
-                return "BREW"
-            case .manual, .sparkle:
-                return "SELF"
-            }
+        private func selfUpdateLinkCell(_ text: String, app: AppRecord) -> NSTableCellView {
+            let cell = NSTableCellView()
+            let button = SelfUpdateLinkButton(title: text, target: self, action: #selector(editSelfUpdateURL(_:)))
+            button.isBordered = false
+            button.bezelStyle = .regularSquare
+            button.alignment = .left
+            button.font = .systemFont(ofSize: 12)
+            button.contentTintColor = .systemBlue
+            button.translatesAutoresizingMaskIntoConstraints = false
+            button.appPath = app.path
+            cell.addSubview(button)
+            NSLayoutConstraint.activate([
+                button.leadingAnchor.constraint(equalTo: cell.leadingAnchor, constant: AppTableColumnLayout.cellHorizontalPadding - 3),
+                button.trailingAnchor.constraint(lessThanOrEqualTo: cell.trailingAnchor, constant: -AppTableColumnLayout.cellHorizontalPadding),
+                button.centerYAnchor.constraint(equalTo: cell.centerYAnchor),
+            ])
+            return cell
         }
 
-        private static func currentVersionText(for app: AppRecord) -> String {
-            let shortVersion = normalized(app.shortVersion)
-            let buildVersion = normalized(app.buildVersion)
-
-            switch (shortVersion, buildVersion) {
-            case let (short?, build?):
-                return "\(short) (\(build))"
-            case let (short?, nil):
-                return short
-            case let (nil, build?):
-                return build
-            case (nil, nil):
-                return "未知"
-            }
-        }
-
-        private static func latestVersionText(for app: AppRecord) -> String {
-            switch app.updateStatus {
-            case .notChecked:
-                return "未检查"
-            case .upToDate:
-                return currentVersionText(for: app)
-            case let .updateAvailable(_, latestVersion):
-                return latestVersion
-            case .unsupported:
-                return "不支持"
-            case .checkFailed:
-                return "检查失败"
-            }
+        private func updateChannelLinkCell(_ text: String, app: AppRecord, color: NSColor) -> NSTableCellView {
+            let cell = NSTableCellView()
+            let button = UpdateChannelLinkButton(title: text, target: self, action: #selector(updateSelectedApp(_:)))
+            button.isBordered = false
+            button.bezelStyle = .regularSquare
+            button.alignment = .left
+            button.font = .systemFont(ofSize: 12)
+            button.contentTintColor = color
+            button.translatesAutoresizingMaskIntoConstraints = false
+            button.appPath = app.path
+            cell.addSubview(button)
+            NSLayoutConstraint.activate([
+                button.leadingAnchor.constraint(equalTo: cell.leadingAnchor, constant: AppTableColumnLayout.cellHorizontalPadding - 3),
+                button.trailingAnchor.constraint(lessThanOrEqualTo: cell.trailingAnchor, constant: -AppTableColumnLayout.cellHorizontalPadding),
+                button.centerYAnchor.constraint(equalTo: cell.centerYAnchor),
+            ])
+            return cell
         }
 
         private static func latestVersionColor(for status: AppUpdateStatus) -> NSColor {
@@ -1148,18 +2040,11 @@ private struct AppCatalogTableView: NSViewRepresentable {
                 return .systemRed
             case .upToDate:
                 return .systemGreen
-            case .notChecked, .unsupported:
+            case .needsOfficialWebsiteConfirmation, .needsManualUpdateURL:
+                return .systemBlue
+            case .ignored, .notChecked, .unsupported, .undetectable:
                 return .secondaryLabelColor
             }
-        }
-
-        private static func normalized(_ value: String?) -> String? {
-            guard let value else {
-                return nil
-            }
-
-            let trimmedValue = value.trimmingCharacters(in: .whitespacesAndNewlines)
-            return trimmedValue.isEmpty ? nil : trimmedValue
         }
     }
 }
@@ -1199,6 +2084,20 @@ private final class AppTableDocumentView: NSView {
     }
 }
 
+private final class AppCatalogNSTableView: NSTableView {
+    var contextMenuProvider: ((Int) -> NSMenu?)?
+
+    override func menu(for event: NSEvent) -> NSMenu? {
+        let point = convert(event.locationInWindow, from: nil)
+        let row = row(at: point)
+        guard row >= 0 else {
+            return nil
+        }
+
+        return contextMenuProvider?(row) ?? super.menu(for: event)
+    }
+}
+
 private final class PlainAppTableRowView: NSTableRowView {
     var isOddRow = false
 
@@ -1222,6 +2121,14 @@ private final class PlainAppTableRowView: NSTableRowView {
         NSColor.controlAccentColor.setFill()
         bounds.fill()
     }
+}
+
+private final class SelfUpdateLinkButton: NSButton {
+    var appPath: URL?
+}
+
+private final class UpdateChannelLinkButton: NSButton {
+    var appPath: URL?
 }
 
 private final class AppNameCellView: NSTableCellView {
@@ -1268,44 +2175,85 @@ private final class AppNameCellView: NSTableCellView {
 
 private struct AppCatalogHeader: View {
     var body: some View {
-        HStack(spacing: 0) {
-            Text("App 名称")
-                .frame(width: AppTableColumnLayout.nameWidth - AppTableColumnLayout.nameLeadingPadding, alignment: .leading)
-                .padding(.leading, AppTableColumnLayout.nameLeadingPadding)
-            Text("来源")
-                .frame(width: AppTableColumnLayout.sourceWidth - AppTableColumnLayout.cellHorizontalPadding, alignment: .leading)
-                .padding(.leading, AppTableColumnLayout.cellHorizontalPadding)
-            Text("当前版本")
-                .frame(width: AppTableColumnLayout.currentVersionWidth - AppTableColumnLayout.cellHorizontalPadding, alignment: .leading)
-                .padding(.leading, AppTableColumnLayout.cellHorizontalPadding)
-            Text("最新版本")
-                .frame(width: AppTableColumnLayout.latestVersionWidth - AppTableColumnLayout.cellHorizontalPadding, alignment: .leading)
-                .padding(.leading, AppTableColumnLayout.cellHorizontalPadding)
-            Spacer(minLength: 0)
-        }
-        .font(.system(size: 12, weight: .regular))
-        .foregroundStyle(.primary.opacity(0.92))
-        .padding(.trailing, 14)
-        .overlay(alignment: .topLeading) {
-            ForEach(Self.dividerOffsets, id: \.self) { offset in
-                Rectangle()
-                    .fill(Color.primary.opacity(0.10))
-                    .frame(width: 1, height: 16)
-                    .offset(x: offset, y: 4)
+        GeometryReader { proxy in
+            let nameWidth = AppTableColumnLayout.nameWidth(for: proxy.size.width)
+            HStack(spacing: 0) {
+                Text("App 名称")
+                    .frame(width: nameWidth - AppTableColumnLayout.nameLeadingPadding, alignment: .leading)
+                    .padding(.leading, AppTableColumnLayout.nameLeadingPadding)
+                Text("来源")
+                    .frame(width: AppTableColumnLayout.sourceWidth - AppTableColumnLayout.cellHorizontalPadding, alignment: .leading)
+                    .padding(.leading, AppTableColumnLayout.cellHorizontalPadding)
+                Text("当前版本")
+                    .frame(width: AppTableColumnLayout.currentVersionWidth - AppTableColumnLayout.cellHorizontalPadding, alignment: .leading)
+                    .padding(.leading, AppTableColumnLayout.cellHorizontalPadding)
+                Text("最新版本")
+                    .frame(width: AppTableColumnLayout.latestVersionWidth - AppTableColumnLayout.cellHorizontalPadding, alignment: .leading)
+                    .padding(.leading, AppTableColumnLayout.cellHorizontalPadding)
+                Spacer(minLength: 0)
+            }
+            .font(.system(size: 12, weight: .regular))
+            .foregroundStyle(.primary.opacity(0.92))
+            .overlay(alignment: .topLeading) {
+                ForEach(Self.dividerOffsets(nameWidth: nameWidth), id: \.self) { offset in
+                    Rectangle()
+                        .fill(Color.primary.opacity(0.10))
+                        .frame(width: 1, height: 16)
+                        .offset(x: offset, y: 4)
+                }
             }
         }
     }
 
-    private static var dividerOffsets: [CGFloat] {
+    private static func dividerOffsets(nameWidth: CGFloat) -> [CGFloat] {
         [
-            AppTableColumnLayout.nameWidth,
-            AppTableColumnLayout.nameWidth + AppTableColumnLayout.sourceWidth,
-            AppTableColumnLayout.nameWidth + AppTableColumnLayout.sourceWidth + AppTableColumnLayout.currentVersionWidth,
+            nameWidth,
+            nameWidth + AppTableColumnLayout.sourceWidth,
+            nameWidth + AppTableColumnLayout.sourceWidth + AppTableColumnLayout.currentVersionWidth,
         ]
     }
 }
 
 private extension AppRecord {
+    var currentVersionDisplayText: String {
+        let shortVersion = normalized(shortVersion)
+        let buildVersion = normalized(buildVersion)
+
+        switch (shortVersion, buildVersion) {
+        case let (short?, build?):
+            return "\(short) (\(build))"
+        case let (short?, nil):
+            return short
+        case let (nil, build?):
+            return build
+        case (nil, nil):
+            return "未知"
+        }
+    }
+
+    var latestVersionDisplayText: String {
+        switch updateStatus {
+        case .notChecked:
+            return "未检查"
+        case .upToDate:
+            return currentVersionDisplayText
+        case let .updateAvailable(_, latestVersion):
+            return latestVersion
+        case .ignored:
+            return "已忽略"
+        case .needsOfficialWebsiteConfirmation:
+            return "待确认"
+        case .needsManualUpdateURL:
+            return "手动输入"
+        case .undetectable:
+            return "无法检测"
+        case .unsupported:
+            return "不支持"
+        case .checkFailed:
+            return "检查失败"
+        }
+    }
+
     func matchesSearchQuery(_ query: String) -> Bool {
         let normalizedQuery = query.localizedLowercase
         return searchableText.contains(normalizedQuery)
@@ -1323,9 +2271,49 @@ private extension AppRecord {
         .joined(separator: " ")
         .localizedLowercase
     }
+
+    private func normalized(_ value: String?) -> String? {
+        guard let value else {
+            return nil
+        }
+
+        let trimmedValue = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmedValue.isEmpty ? nil : trimmedValue
+    }
+}
+
+private extension AppUpdateStatus {
+    var requiresSelfUpdateURLInput: Bool {
+        switch self {
+        case .needsOfficialWebsiteConfirmation, .needsManualUpdateURL:
+            return true
+        default:
+            return false
+        }
+    }
+
+    var canRunUpdateAction: Bool {
+        switch self {
+        case .updateAvailable:
+            return true
+        default:
+            return false
+        }
+    }
 }
 
 private extension InstallSource {
+    var shortDisplayName: String {
+        switch self {
+        case .macAppStore:
+            return "MAS"
+        case .homebrewCask:
+            return "BREW"
+        case .manual, .sparkle:
+            return "SELF"
+        }
+    }
+
     var searchText: String {
         switch self {
         case .macAppStore:

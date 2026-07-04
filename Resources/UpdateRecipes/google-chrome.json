@@ -1,0 +1,12 @@
+{
+  "id": "com.google.Chrome",
+  "name": "Google Chrome",
+  "recipePrompt": "这个规则用于识别 Google Chrome。Chrome 的稳定版本查询应使用 OmahaProxy/Chrome Version History 等专用接口并区分 macOS channel/architecture；当前规则引擎未内置该专用策略，先不自动抽取版本。",
+  "match": {
+    "bundleIdentifier": "com.google.Chrome",
+    "appName": "Google Chrome",
+    "officialHost": "google.com"
+  },
+  "checks": [],
+  "updatePageURL": "https://www.google.com/chrome/"
+}

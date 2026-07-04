@@ -1,0 +1,12 @@
+{
+  "id": "com.tencent.Lemon",
+  "name": "Tencent Lemon",
+  "recipePrompt": "这个规则用于识别腾讯柠檬清理。官方页面 lemon.qq.com 容易只暴露 dmg 链接或资源名，当前不自动抽取版本。",
+  "match": {
+    "bundleIdentifier": "com.tencent.Lemon",
+    "appName": "Tencent Lemon",
+    "officialHost": "qq.com"
+  },
+  "checks": [],
+  "updatePageURL": "https://lemon.qq.com/"
+}

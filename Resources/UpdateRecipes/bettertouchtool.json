@@ -1,0 +1,21 @@
+{
+  "id": "com.hegenberg.BetterTouchTool",
+  "name": "BetterTouchTool",
+  "recipePrompt": "这个规则用于检测 BetterTouchTool 的最新版本。官网 folivora.ai 的 /downloads 页面是 React 壳，静态 HTML 中没有版本号。请使用 https://folivora.ai/releases/，该目录列出官方 zip 包，文件名形如 btt6.613-2026070301.zip，其中 6.613 是用户可见版本号，2026070301 是构建/发布日期标识。",
+  "match": {
+    "bundleIdentifier": "com.hegenberg.BetterTouchTool",
+    "appName": "BetterTouchTool",
+    "officialHost": "folivora.ai"
+  },
+  "checks": [
+    {
+      "url": "https://folivora.ai/releases/",
+      "extract": {
+        "type": "linkRegex",
+        "pattern": "btt([0-9]+(?:\\.[0-9]+)+)-[0-9]+(?:-(?:arm64|intel))?\\.zip",
+        "versionGroup": 1
+      }
+    }
+  ],
+  "updatePageURL": "https://folivora.ai/releases/"
+}

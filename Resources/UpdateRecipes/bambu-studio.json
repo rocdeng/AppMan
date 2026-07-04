@@ -1,0 +1,21 @@
+{
+  "id": "com.bambulab.bambu-studio",
+  "name": "Bambu Studio",
+  "recipePrompt": "这个规则用于检测 Bambu Studio。官方开源发布在 GitHub bambulab/BambuStudio releases，GitHub API 的 tag_name 形如 v02.07.01.62。不要从 bambulab.com 下载页抽取 dmg 文件时间戳。",
+  "match": {
+    "bundleIdentifier": "com.bambulab.bambu-studio",
+    "appName": "Bambu Studio",
+    "officialHost": "github.com"
+  },
+  "checks": [
+    {
+      "url": "https://api.github.com/repos/bambulab/BambuStudio/releases/latest",
+      "extract": {
+        "type": "regex",
+        "pattern": "\"tag_name\"\\s*:\\s*\"v?([0-9]+(?:\\.[0-9A-Za-z]+){1,5})\"",
+        "versionGroup": 1
+      }
+    }
+  ],
+  "updatePageURL": "https://github.com/bambulab/BambuStudio/releases/latest"
+}

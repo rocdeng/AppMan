@@ -1,0 +1,12 @@
+{
+  "id": "com.autodesk.dls.streamer.scriptapp.Autodesk-Fusion-Service-Utility",
+  "name": "Autodesk Fusion Service Utility",
+  "recipePrompt": "这个规则用于识别 Autodesk Fusion Service Utility。它是 Autodesk Fusion 附带工具，版本通常随 Fusion 主应用一起发布。Autodesk 页面动态重且不稳定，当前不自动抽取版本。",
+  "match": {
+    "bundleIdentifier": "com.autodesk.dls.streamer.scriptapp.Autodesk-Fusion-Service-Utility",
+    "appName": "Autodesk Fusion Service Utility",
+    "officialHost": "autodesk.com"
+  },
+  "checks": [],
+  "updatePageURL": "https://www.autodesk.com/products/fusion-360/overview"
+}

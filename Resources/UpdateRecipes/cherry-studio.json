@@ -1,0 +1,21 @@
+{
+  "id": "com.kangfenmao.CherryStudio",
+  "name": "Cherry Studio",
+  "recipePrompt": "这个规则用于检测 Cherry Studio。官方版本发布在 GitHub CherryHQ/cherry-studio releases，GitHub API 的 tag_name 形如 v1.9.11，去掉 v 即为版本。官网搜索有时会返回 cherry-ai.com，但版本检测以 GitHub release 为准。",
+  "match": {
+    "bundleIdentifier": "com.kangfenmao.CherryStudio",
+    "appName": "Cherry Studio",
+    "officialHost": "github.com"
+  },
+  "checks": [
+    {
+      "url": "https://api.github.com/repos/CherryHQ/cherry-studio/releases/latest",
+      "extract": {
+        "type": "regex",
+        "pattern": "\"tag_name\"\\s*:\\s*\"v?([0-9]+(?:\\.[0-9A-Za-z]+){1,5})\"",
+        "versionGroup": 1
+      }
+    }
+  ],
+  "updatePageURL": "https://github.com/CherryHQ/cherry-studio/releases"
+}

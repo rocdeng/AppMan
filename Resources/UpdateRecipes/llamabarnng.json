@@ -1,0 +1,21 @@
+{
+  "id": "app.llamabarnng.LlamaBarnNG",
+  "name": "LlamaBarnNG",
+  "recipePrompt": "这个规则用于检测 LlamaBarnNG。appcast 位于 releases.llamabarn.app/appcast.xml，其中 sparkle:shortVersionString 是最新版本；该项目提示迁移到新的 Llama app。",
+  "match": {
+    "bundleIdentifier": "app.llamabarnng.LlamaBarnNG",
+    "appName": "LlamaBarnNG",
+    "officialHost": "llamabarn.app"
+  },
+  "checks": [
+    {
+      "url": "https://releases.llamabarn.app/appcast.xml",
+      "extract": {
+        "type": "regex",
+        "pattern": "sparkle:shortVersionString>([0-9]+(?:\\.[0-9A-Za-z]+){1,5})<",
+        "versionGroup": 1
+      }
+    }
+  ],
+  "updatePageURL": "https://github.com/ggml-org/Llama-macOS/releases/latest"
+}

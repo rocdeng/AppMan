@@ -1,0 +1,12 @@
+{
+  "id": "com.openai.codex",
+  "name": "Codex",
+  "recipePrompt": "这个规则用于识别 Codex macOS app。官方入口是 developers.openai.com/codex/app，但版本发布和自动更新渠道可能由应用内部管理，当前不自动抽取版本，避免从下载链接架构名误报。",
+  "match": {
+    "bundleIdentifier": "com.openai.codex",
+    "appName": "Codex",
+    "officialHost": "openai.com"
+  },
+  "checks": [],
+  "updatePageURL": "https://developers.openai.com/codex/app"
+}

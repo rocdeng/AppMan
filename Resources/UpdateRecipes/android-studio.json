@@ -1,0 +1,12 @@
+{
+  "id": "com.google.android.studio",
+  "name": "Android Studio",
+  "recipePrompt": "这个规则用于识别 Android Studio。Android Studio 官方下载页是 developer.android.com/studio，但页面会混合稳定版、预览版、构建号和 Android Gradle Plugin 版本，当前规则先不自动抽取版本，避免把 2026.1.1 这类预览/渠道版本误报为当前稳定更新。",
+  "match": {
+    "bundleIdentifier": "com.google.android.studio",
+    "appName": "Android Studio",
+    "officialHost": "developer.android.com"
+  },
+  "checks": [],
+  "updatePageURL": "https://developer.android.com/studio"
+}

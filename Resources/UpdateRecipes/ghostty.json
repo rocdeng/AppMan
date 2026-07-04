@@ -1,0 +1,21 @@
+{
+  "id": "com.mitchellh.ghostty",
+  "name": "Ghostty",
+  "recipePrompt": "这个规则用于检测 Ghostty 官网下载页版本。https://ghostty.org/download 的页面中包含 Version 1.3.1 文本和 release.files.ghostty.org/1.3.1/Ghostty.dmg 下载链接。优先取 Version 文本。",
+  "match": {
+    "bundleIdentifier": "com.mitchellh.ghostty",
+    "appName": "Ghostty",
+    "officialHost": "ghostty.org"
+  },
+  "checks": [
+    {
+      "url": "https://ghostty.org/download",
+      "extract": {
+        "type": "regex",
+        "pattern": "Version\\s+([0-9]+(?:\\.[0-9A-Za-z]+){1,5})",
+        "versionGroup": 1
+      }
+    }
+  ],
+  "updatePageURL": "https://ghostty.org/download"
+}

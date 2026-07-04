@@ -1,0 +1,21 @@
+{
+  "id": "org.godotengine.godot",
+  "name": "Godot",
+  "recipePrompt": "这个规则用于检测 Godot 官方稳定版。版本发布在 GitHub godotengine/godot releases，tag_name 形如 4.7-stable。只取数字版本 4.7，不要从下载页图片资源如 4.x.webp 抽取版本。",
+  "match": {
+    "bundleIdentifier": "org.godotengine.godot",
+    "appName": "Godot",
+    "officialHost": "github.com"
+  },
+  "checks": [
+    {
+      "url": "https://api.github.com/repos/godotengine/godot/releases/latest",
+      "extract": {
+        "type": "regex",
+        "pattern": "\"tag_name\"\\s*:\\s*\"v?([0-9]+(?:\\.[0-9A-Za-z]+){1,5})(?:-[^\"]+)?\"",
+        "versionGroup": 1
+      }
+    }
+  ],
+  "updatePageURL": "https://godotengine.org/download/macos/"
+}

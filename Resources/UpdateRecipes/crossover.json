@@ -1,0 +1,21 @@
+{
+  "id": "com.codeweavers.CrossOver",
+  "name": "CrossOver",
+  "recipePrompt": "这个规则用于检测 CrossOver Mac。官方 Sparkle feed 是 https://www.codeweavers.com/xml/versions/cxmac.xml，优先使用 sparkle:shortVersionString。",
+  "match": {
+    "bundleIdentifier": "com.codeweavers.CrossOver",
+    "appName": "CrossOver",
+    "officialHost": "codeweavers.com"
+  },
+  "checks": [
+    {
+      "url": "https://www.codeweavers.com/xml/versions/cxmac.xml",
+      "extract": {
+        "type": "regex",
+        "pattern": "sparkle:shortVersionString=\"([0-9]+(?:\\.[0-9A-Za-z]+){1,5})\"",
+        "versionGroup": 1
+      }
+    }
+  ],
+  "updatePageURL": "https://www.codeweavers.com/crossover/download"
+}

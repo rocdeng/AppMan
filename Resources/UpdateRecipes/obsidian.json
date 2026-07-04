@@ -1,0 +1,21 @@
+{
+  "id": "md.obsidian",
+  "name": "Obsidian",
+  "recipePrompt": "这个规则用于检测 Obsidian。官方 release 镜像在 GitHub obsidianmd/obsidian-releases，GitHub API 的 tag_name 形如 v1.12.7。不要从下载页的 dmg 文件名把 .dmg 后缀带进版本。",
+  "match": {
+    "bundleIdentifier": "md.obsidian",
+    "appName": "Obsidian",
+    "officialHost": "github.com"
+  },
+  "checks": [
+    {
+      "url": "https://api.github.com/repos/obsidianmd/obsidian-releases/releases/latest",
+      "extract": {
+        "type": "regex",
+        "pattern": "\"tag_name\"\\s*:\\s*\"v?([0-9]+(?:\\.[0-9A-Za-z]+){1,5})\"",
+        "versionGroup": 1
+      }
+    }
+  ],
+  "updatePageURL": "https://obsidian.md/download"
+}

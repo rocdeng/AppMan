@@ -1,0 +1,21 @@
+{
+  "id": "eu.exelban.Stats",
+  "name": "Stats",
+  "recipePrompt": "这个规则用于检测 Stats。官方版本发布在 GitHub exelban/stats releases，GitHub API 的 tag_name 形如 v3.0.5，去掉 v 即为版本。",
+  "match": {
+    "bundleIdentifier": "eu.exelban.Stats",
+    "appName": "Stats",
+    "officialHost": "github.com"
+  },
+  "checks": [
+    {
+      "url": "https://api.github.com/repos/exelban/stats/releases/latest",
+      "extract": {
+        "type": "regex",
+        "pattern": "\"tag_name\"\\s*:\\s*\"v?([0-9]+(?:\\.[0-9A-Za-z]+){1,5})\"",
+        "versionGroup": 1
+      }
+    }
+  ],
+  "updatePageURL": "https://github.com/exelban/stats/releases"
+}

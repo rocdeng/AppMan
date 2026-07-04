@@ -1,0 +1,29 @@
+{
+  "id": "net.freemacsoft.AppCleaner",
+  "name": "AppCleaner",
+  "recipePrompt": "这个规则用于检测 AppCleaner 的最新版本。AppCleaner 官方站点是 freemacsoft.net，下载页 https://freemacsoft.net/appcleaner/ 的 Downloads 区域直接列出 Version 3.6.8 这类版本文本，下载链接文件名也形如 AppCleaner_3.6.8.zip。不要使用 MacUpdate、Softonic 等第三方下载站。",
+  "match": {
+    "bundleIdentifier": "net.freemacsoft.AppCleaner",
+    "appName": "AppCleaner",
+    "officialHost": "freemacsoft.net"
+  },
+  "checks": [
+    {
+      "url": "https://freemacsoft.net/appcleaner/",
+      "extract": {
+        "type": "regex",
+        "pattern": "(?i)Version\\s+([0-9]+(?:\\.[0-9A-Za-z]+){1,5})",
+        "versionGroup": 1
+      }
+    },
+    {
+      "url": "https://freemacsoft.net/appcleaner/",
+      "extract": {
+        "type": "linkRegex",
+        "pattern": "AppCleaner_([0-9]+(?:\\.[0-9A-Za-z]+){1,5})\\.zip",
+        "versionGroup": 1
+      }
+    }
+  ],
+  "updatePageURL": "https://freemacsoft.net/appcleaner/"
+}

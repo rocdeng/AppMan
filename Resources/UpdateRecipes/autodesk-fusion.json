@@ -1,0 +1,12 @@
+{
+  "id": "com.autodesk.dls.streamer.scriptapp.Autodesk-Fusion",
+  "name": "Autodesk Fusion",
+  "recipePrompt": "这个规则用于识别 Autodesk Fusion。官方入口是 autodesk.com/products/fusion-360/overview，但 Autodesk 使用在线安装器和登录/动态页面，公开页面不稳定暴露可直接比较的 macOS app 版本，当前不自动抽取版本。",
+  "match": {
+    "bundleIdentifier": "com.autodesk.dls.streamer.scriptapp.Autodesk-Fusion",
+    "appName": "Autodesk Fusion",
+    "officialHost": "autodesk.com"
+  },
+  "checks": [],
+  "updatePageURL": "https://www.autodesk.com/products/fusion-360/overview"
+}

@@ -1,0 +1,12 @@
+{
+  "id": "ai.unsloth.studio",
+  "name": "Unsloth Studio",
+  "recipePrompt": "这个规则用于识别 Unsloth Studio。官方文档页面混合包/依赖版本，当前未确认稳定桌面 app 更新接口，先不自动抽取版本。",
+  "match": {
+    "bundleIdentifier": "ai.unsloth.studio",
+    "appName": "Unsloth Studio",
+    "officialHost": "unsloth.ai"
+  },
+  "checks": [],
+  "updatePageURL": "https://unsloth.ai/docs/new/studio"
+}

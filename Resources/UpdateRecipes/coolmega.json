@@ -1,0 +1,12 @@
+{
+  "id": "com.futuredream.coolmega",
+  "name": "CoolMega",
+  "recipePrompt": "这个规则用于识别 CoolMega。当前未确认其真实官方更新接口，扫描结果曾误命中 MEGA 官方站和 Linux 包名，当前不自动抽取版本。",
+  "match": {
+    "bundleIdentifier": "com.futuredream.coolmega",
+    "appName": "CoolMega",
+    "officialHost": null
+  },
+  "checks": [],
+  "updatePageURL": null
+}

@@ -13,6 +13,35 @@ public struct AppBundleReader: @unchecked Sendable {
     }
 
     public func readApp(at appURL: URL) throws -> AppRecord {
+        let metadata = try readMetadata(at: appURL)
+        return AppRecord(
+            id: metadata.bundleIdentifier ?? appURL.path,
+            name: metadata.name,
+            bundleIdentifier: metadata.bundleIdentifier,
+            shortVersion: metadata.shortVersion,
+            buildVersion: metadata.buildVersion,
+            path: appURL,
+            sizeBytes: directorySize(at: appURL)
+        )
+    }
+
+    public func refreshMetadata(for app: AppRecord) throws -> AppRecord {
+        let metadata = try readMetadata(at: app.path)
+        return AppRecord(
+            id: metadata.bundleIdentifier ?? app.path.path,
+            name: metadata.name,
+            bundleIdentifier: metadata.bundleIdentifier,
+            shortVersion: metadata.shortVersion,
+            buildVersion: metadata.buildVersion,
+            path: app.path,
+            sizeBytes: app.sizeBytes,
+            installSource: app.installSource,
+            updateStatus: app.updateStatus,
+            updateURL: app.updateURL
+        )
+    }
+
+    private func readMetadata(at appURL: URL) throws -> AppMetadata {
         let infoPlistURL = appURL
             .appendingPathComponent("Contents", isDirectory: true)
             .appendingPathComponent("Info.plist")
@@ -36,16 +65,11 @@ public struct AppBundleReader: @unchecked Sendable {
         let bundleIdentifier = plist["CFBundleIdentifier"] as? String
         let shortVersion = plist["CFBundleShortVersionString"] as? String
         let buildVersion = plist["CFBundleVersion"] as? String
-        let sizeBytes = directorySize(at: appURL)
-
-        return AppRecord(
-            id: bundleIdentifier ?? appURL.path,
+        return AppMetadata(
             name: name,
             bundleIdentifier: bundleIdentifier,
             shortVersion: shortVersion,
-            buildVersion: buildVersion,
-            path: appURL,
-            sizeBytes: sizeBytes
+            buildVersion: buildVersion
         )
     }
 
@@ -65,4 +89,11 @@ public struct AppBundleReader: @unchecked Sendable {
         }
         return size
     }
+}
+
+private struct AppMetadata {
+    let name: String
+    let bundleIdentifier: String?
+    let shortVersion: String?
+    let buildVersion: String?
 }

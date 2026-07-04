@@ -37,8 +37,22 @@ final class InstallSourceResolverTests: XCTestCase {
 
         XCTAssertEqual(
             source,
-            .manual(reason: "没有找到 Homebrew Cask 或 Mac App Store 安装证据")
+            .manual(reason: "没有找到 Homebrew Cask、Mac App Store 或 Sparkle 更新源证据")
         )
+    }
+
+    func testReturnsSparkleWhenAppHasFeedURL() throws {
+        let feedURL = URL(string: "https://example.com/appcast.xml")!
+        let resolver = InstallSourceResolver(
+            homebrewDetector: StubHomebrewDetector(source: nil),
+            macAppStoreDetector: StubMacAppStoreDetector(isMacAppStoreApp: false),
+            sparkleFeedDetector: StubSparkleFeedDetector(feedURL: feedURL)
+        )
+        let app = makeAppRecord(name: "SparkleApp")
+
+        let source = try resolver.resolveInstallSource(for: app)
+
+        XCTAssertEqual(source, .sparkle(feedURL: feedURL))
     }
 
     func testResolveInstallSourcesUpdatesEachAppRecordInstallSource() throws {
@@ -59,7 +73,7 @@ final class InstallSourceResolverTests: XCTestCase {
         XCTAssertEqual(resolvedApps.map(\.installSource), [
             .homebrewCask(token: "visual-studio-code"),
             .macAppStore,
-            .manual(reason: "没有找到 Homebrew Cask 或 Mac App Store 安装证据"),
+            .manual(reason: "没有找到 Homebrew Cask、Mac App Store 或 Sparkle 更新源证据"),
         ])
     }
 
@@ -84,6 +98,30 @@ final class InstallSourceResolverTests: XCTestCase {
         )
 
         XCTAssertTrue(MacAppStoreDetector().isAppStoreApp(app))
+    }
+
+    func testSparkleFeedDetectorFindsSUFeedURLInAppBundle() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let appURL = root.appendingPathComponent("SparkleApp.app", isDirectory: true)
+        let contentsURL = appURL.appendingPathComponent("Contents", isDirectory: true)
+        try FileManager.default.createDirectory(at: contentsURL, withIntermediateDirectories: true)
+
+        let feedURL = URL(string: "https://example.com/appcast.xml")!
+        let plist: [String: Any] = [
+            "CFBundleIdentifier": "com.example.sparkle",
+            "CFBundleName": "SparkleApp",
+            "SUFeedURL": feedURL.absoluteString,
+        ]
+        let plistData = try PropertyListSerialization.data(fromPropertyList: plist, format: .xml, options: 0)
+        try plistData.write(to: contentsURL.appendingPathComponent("Info.plist"))
+        let app = makeAppRecord(name: "SparkleApp", path: appURL)
+
+        let detectedFeedURL = try SparkleFeedDetector().detectFeedURL(for: app)
+
+        XCTAssertEqual(detectedFeedURL, feedURL)
     }
 
     private func makeAppRecord(
@@ -131,5 +169,13 @@ private struct NameBasedMacAppStoreDetector: MacAppStoreDetecting {
 
     func isAppStoreApp(_ app: AppRecord) -> Bool {
         appStoreNames.contains(app.name)
+    }
+}
+
+private struct StubSparkleFeedDetector: SparkleFeedDetecting {
+    let feedURL: URL?
+
+    func detectFeedURL(for app: AppRecord) throws -> URL? {
+        feedURL
     }
 }

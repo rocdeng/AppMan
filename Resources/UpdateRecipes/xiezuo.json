@@ -1,0 +1,12 @@
+{
+  "id": "com.kingsoft.xiezuo",
+  "name": "xiezuo",
+  "recipePrompt": "这个规则用于识别金山协作/相关组件。它和 WPS 页面容易共享官网资源，当前不自动抽取版本。",
+  "match": {
+    "bundleIdentifier": "com.kingsoft.xiezuo",
+    "appName": "xiezuo",
+    "officialHost": "wps.com"
+  },
+  "checks": [],
+  "updatePageURL": "https://www.wps.com/office/mac/"
+}

@@ -1,0 +1,12 @@
+{
+  "id": "com.agentskills.desktop",
+  "name": "skills-manager",
+  "recipePrompt": "这个规则用于识别本机 skills-manager。当前未确认公开官方更新接口，搜索结果曾误命中 Microsoft Store 页面，先不自动抽取版本。",
+  "match": {
+    "bundleIdentifier": "com.agentskills.desktop",
+    "appName": "skills-manager",
+    "officialHost": null
+  },
+  "checks": [],
+  "updatePageURL": null
+}

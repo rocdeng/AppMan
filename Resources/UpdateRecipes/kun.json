@@ -1,0 +1,12 @@
+{
+  "id": "com.xingyuzhong.deepseekgui",
+  "name": "Kun",
+  "recipePrompt": "这个规则用于识别 Kun/DeepSeek GUI。当前未确认稳定官方更新接口，搜索结果容易命中第三方站，先不自动抽取版本。",
+  "match": {
+    "bundleIdentifier": "com.xingyuzhong.deepseekgui",
+    "appName": "Kun",
+    "officialHost": "deepseek-gui.com"
+  },
+  "checks": [],
+  "updatePageURL": "https://deepseek-gui.com/"
+}

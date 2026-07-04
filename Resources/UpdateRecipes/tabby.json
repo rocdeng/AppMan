@@ -1,0 +1,21 @@
+{
+  "id": "org.tabby",
+  "name": "Tabby",
+  "recipePrompt": "这个规则用于检测 Tabby。官方版本发布在 GitHub Eugeny/tabby releases，GitHub API 的 tag_name 形如 v1.0.234。资产里有 macOS dmg/zip，但 tag_name 最干净。",
+  "match": {
+    "bundleIdentifier": "org.tabby",
+    "appName": "Tabby",
+    "officialHost": "github.com"
+  },
+  "checks": [
+    {
+      "url": "https://api.github.com/repos/Eugeny/tabby/releases/latest",
+      "extract": {
+        "type": "regex",
+        "pattern": "\"tag_name\"\\s*:\\s*\"v?([0-9]+(?:\\.[0-9A-Za-z]+){1,5})\"",
+        "versionGroup": 1
+      }
+    }
+  ],
+  "updatePageURL": "https://github.com/Eugeny/tabby/releases"
+}

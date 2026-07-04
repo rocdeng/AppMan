@@ -1,0 +1,12 @@
+{
+  "id": "com.ccswitch.desktop",
+  "name": "CC Switch",
+  "recipePrompt": "这个规则用于识别 CC Switch。官方站点是 ccswitch.io，目前没有稳定公开的 macOS 最新版本元数据入口；当前不自动抽取版本。",
+  "match": {
+    "bundleIdentifier": "com.ccswitch.desktop",
+    "appName": "CC Switch",
+    "officialHost": "ccswitch.io"
+  },
+  "checks": [],
+  "updatePageURL": "https://ccswitch.io/en/"
+}

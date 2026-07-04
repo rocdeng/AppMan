@@ -1,0 +1,21 @@
+{
+  "id": "2dust.v2rayN",
+  "name": "v2rayN",
+  "recipePrompt": "这个规则用于检测 v2rayN。官方版本发布在 GitHub 2dust/v2rayN releases，GitHub API 的 tag_name 形如 7.22.7。资产里有很多 Linux/Windows 包，不能从 64.zip 之类文件名猜版本。",
+  "match": {
+    "bundleIdentifier": "2dust.v2rayN",
+    "appName": "v2rayN",
+    "officialHost": "github.com"
+  },
+  "checks": [
+    {
+      "url": "https://api.github.com/repos/2dust/v2rayN/releases/latest",
+      "extract": {
+        "type": "regex",
+        "pattern": "\"tag_name\"\\s*:\\s*\"v?([0-9]+(?:\\.[0-9A-Za-z]+){1,5})\"",
+        "versionGroup": 1
+      }
+    }
+  ],
+  "updatePageURL": "https://github.com/2dust/v2rayN/releases"
+}

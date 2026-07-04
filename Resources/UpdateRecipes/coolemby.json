@@ -1,0 +1,12 @@
+{
+  "id": "dev.coolmby.coolemby",
+  "name": "CoolEmby",
+  "recipePrompt": "这个规则用于识别本机自开发 CoolEmby。它不是公开官网分发的通用 app，当前不自动联网抽取版本。",
+  "match": {
+    "bundleIdentifier": "dev.coolmby.coolemby",
+    "appName": "CoolEmby",
+    "officialHost": null
+  },
+  "checks": [],
+  "updatePageURL": null
+}

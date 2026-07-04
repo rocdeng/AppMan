@@ -1,0 +1,21 @@
+{
+  "id": "com.symless.synergy",
+  "name": "Synergy",
+  "recipePrompt": "这个规则用于检测 Synergy 3。官方下载页 https://symless.com/synergy/download 同时列出 Synergy 1 和 Synergy 3；本机 bundle 是 Synergy 3，因此只取 Synergy 3 卡片中的 v3.x 版本，不要误取 Synergy 1。",
+  "match": {
+    "bundleIdentifier": "com.symless.synergy",
+    "appName": "Synergy",
+    "officialHost": "symless.com"
+  },
+  "checks": [
+    {
+      "url": "https://symless.com/synergy/download",
+      "extract": {
+        "type": "regex",
+        "pattern": "Synergy 3[\\s\\S]{0,500}?v([0-9]+(?:\\.[0-9A-Za-z]+){1,5})",
+        "versionGroup": 1
+      }
+    }
+  ],
+  "updatePageURL": "https://symless.com/synergy/download"
+}

@@ -1,0 +1,12 @@
+{
+  "id": "com.voiceinput.app",
+  "name": "VoiceInput",
+  "recipePrompt": "这个规则用于识别 VoiceInput。当前搜索结果可能命中 Typeless/OpenTypeless 的榜单页而非真实 app 官网，先不自动抽取版本。",
+  "match": {
+    "bundleIdentifier": "com.voiceinput.app",
+    "appName": "VoiceInput",
+    "officialHost": null
+  },
+  "checks": [],
+  "updatePageURL": null
+}

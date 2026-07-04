@@ -1,0 +1,12 @@
+{
+  "id": "com.panic.Transmit",
+  "name": "Transmit",
+  "recipePrompt": "这个规则用于识别 Panic Transmit。app 内带有 Panic 更新接口，但当前规则引擎还不能表达需要 query 参数/产品参数的专用协议，先不自动抽取版本。",
+  "match": {
+    "bundleIdentifier": "com.panic.Transmit",
+    "appName": "Transmit",
+    "officialHost": "panic.com"
+  },
+  "checks": [],
+  "updatePageURL": "https://www.panic.com/transmit/"
+}

@@ -1,0 +1,21 @@
+{
+  "id": "com.aone.keka",
+  "name": "Keka",
+  "recipePrompt": "这个规则用于检测 Keka 官网版本。https://www.keka.io/en/ 的下载按钮文本形如 Download v1.6.7。只取主下载按钮附近的版本，不要取 Legacy 旧版本。",
+  "match": {
+    "bundleIdentifier": "com.aone.keka",
+    "appName": "Keka",
+    "officialHost": "keka.io"
+  },
+  "checks": [
+    {
+      "url": "https://www.keka.io/en/",
+      "extract": {
+        "type": "regex",
+        "pattern": "Download\\s+v([0-9]+(?:\\.[0-9A-Za-z]+){1,5})",
+        "versionGroup": 1
+      }
+    }
+  ],
+  "updatePageURL": "https://www.keka.io/en/"
+}

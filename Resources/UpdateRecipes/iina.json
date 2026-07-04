@@ -1,0 +1,21 @@
+{
+  "id": "com.colliderli.iina",
+  "name": "IINA",
+  "recipePrompt": "这个规则用于检测 IINA 的最新稳定版本。官网首页 https://iina.io/ 的下载按钮链接形如 https://dl-portal.iina.io/IINA.v1.4.4.dmg，按钮旁也显示 v1.4.4。也可以使用 GitHub iina/iina releases，但官网首页足够稳定。",
+  "match": {
+    "bundleIdentifier": "com.colliderli.iina",
+    "appName": "IINA",
+    "officialHost": "iina.io"
+  },
+  "checks": [
+    {
+      "url": "https://iina.io/",
+      "extract": {
+        "type": "linkRegex",
+        "pattern": "IINA\\.v([0-9]+(?:\\.[0-9A-Za-z]+){1,5})\\.dmg",
+        "versionGroup": 1
+      }
+    }
+  ],
+  "updatePageURL": "https://iina.io/"
+}
