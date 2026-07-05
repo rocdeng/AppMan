@@ -291,6 +291,7 @@ private struct AppChromeView: View {
     let updateAll: () async -> Void
     let uninstall: () -> Void
     @State private var isSearchExpanded = false
+    @State private var searchFocusToken = 0
 
     private var isBusy: Bool {
         isScanning || isCheckingUpdates || isUpdatingApp || isUninstalling
@@ -335,14 +336,29 @@ private struct AppChromeView: View {
                 }
                 .offset(x: 257, y: 8)
 
-                LiquidSearchControl(text: $searchText, isExpanded: $isSearchExpanded)
-                    .position(x: proxy.size.width - 24, y: 23)
+                LiquidSearchControl(
+                    text: $searchText,
+                    isExpanded: $isSearchExpanded,
+                    focusToken: searchFocusToken
+                )
+                .position(
+                    x: proxy.size.width - (isSearchExpanded ? 143 : 24),
+                    y: 23
+                )
 
                 if showsHeader {
                     AppCatalogHeader()
                         .frame(width: proxy.size.width, height: AppLayout.headerHeight)
                         .offset(y: AppLayout.titlebarHeight + AppLayout.toolbarHeight)
                 }
+
+                Button("搜索") {
+                    isSearchExpanded = true
+                    searchFocusToken += 1
+                }
+                .keyboardShortcut("f", modifiers: .command)
+                .opacity(0)
+                .frame(width: 0, height: 0)
             }
         }
         .frame(height: showsHeader ? AppLayout.chromeHeight : AppLayout.titlebarHeight + AppLayout.toolbarHeight)
@@ -1006,18 +1022,19 @@ private struct LiquidSegmentedTabs: View {
 private struct LiquidSearchControl: View {
     @Binding var text: String
     @Binding var isExpanded: Bool
+    let focusToken: Int
     @FocusState private var isFocused: Bool
 
     var body: some View {
         Group {
-            if isExpanded || !text.isEmpty {
+            if isExpanded {
                 HStack(spacing: 7) {
                     Image(systemName: "magnifyingglass")
                         .font(.system(size: 15, weight: .medium))
                         .foregroundStyle(.secondary)
                     TextField("搜索 App", text: $text)
                         .textFieldStyle(.plain)
-                        .font(.system(size: 13))
+                        .font(.system(size: 14))
                         .focused($isFocused)
                     if !text.isEmpty {
                         Button {
@@ -1030,11 +1047,26 @@ private struct LiquidSearchControl: View {
                         .buttonStyle(.plain)
                     }
                 }
-                .padding(.horizontal, 11)
-                .frame(width: 220, height: 42)
-                .background(Color.primary.opacity(0.07), in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+                .padding(.horizontal, 12)
+                .frame(width: 238, height: 44)
+                .background(Color.white.opacity(0.94), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 22, style: .continuous)
+                        .stroke(isFocused ? Color.accentColor.opacity(0.78) : Color.primary.opacity(0.08), lineWidth: isFocused ? 4 : 1)
+                }
+                .shadow(color: Color.black.opacity(0.08), radius: 12, x: 0, y: 3)
                 .onAppear {
                     isFocused = true
+                }
+                .onChange(of: focusToken) { _ in
+                    isExpanded = true
+                    isFocused = true
+                }
+                .onChange(of: isFocused) { focused in
+                    if !focused {
+                        text = ""
+                        isExpanded = false
+                    }
                 }
             } else {
                 Button {
