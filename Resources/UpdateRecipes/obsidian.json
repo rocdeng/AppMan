@@ -17,5 +17,11 @@
       }
     }
   ],
-  "updatePageURL": "https://obsidian.md/download"
+  "updatePageURL": "https://obsidian.md/download",
+  "download": {
+    "url": null,
+    "sourceURL": "https://api.github.com/repos/obsidianmd/obsidian-releases/releases/latest",
+    "pattern": "\"browser_download_url\"\\s*:\\s*\"([^\"]*\\.dmg)\"",
+    "urlGroup": 1
+  }
 }

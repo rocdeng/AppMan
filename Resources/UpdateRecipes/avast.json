@@ -8,5 +8,6 @@
     "officialHost": "avast.com"
   },
   "checks": [],
-  "updatePageURL": "https://www.avast.com/en-us/free-mac-security"
+  "updatePageURL": "https://www.avast.com/en-us/free-mac-security",
+  "download": null
 }

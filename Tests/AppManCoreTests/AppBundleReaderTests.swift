@@ -65,7 +65,8 @@ final class AppBundleReaderTests: XCTestCase {
             sizeBytes: 12345,
             installSource: .macAppStore,
             updateStatus: .updateAvailable(installedVersion: "0.9", latestVersion: "1.0"),
-            updateURL: URL(string: "macappstore://itunes.apple.com/app/id123")
+            updateURL: URL(string: "macappstore://itunes.apple.com/app/id123"),
+            updateURLIsDirectDownload: true
         )
 
         let refreshed = try AppBundleReader().refreshMetadata(for: original)
@@ -76,6 +77,7 @@ final class AppBundleReaderTests: XCTestCase {
         XCTAssertEqual(refreshed.installSource, original.installSource)
         XCTAssertEqual(refreshed.updateStatus, original.updateStatus)
         XCTAssertEqual(refreshed.updateURL, original.updateURL)
+        XCTAssertEqual(refreshed.updateURLIsDirectDownload, original.updateURLIsDirectDownload)
     }
 
     private func fixtureURL(_ name: String) throws -> URL {

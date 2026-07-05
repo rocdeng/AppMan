@@ -17,5 +17,11 @@
       }
     }
   ],
-  "updatePageURL": "https://code.visualstudio.com/download"
+  "updatePageURL": "https://code.visualstudio.com/download",
+  "download": {
+    "url": "https://update.code.visualstudio.com/latest/darwin-arm64/stable",
+    "sourceURL": null,
+    "pattern": null,
+    "urlGroup": null
+  }
 }

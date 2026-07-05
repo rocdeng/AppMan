@@ -33,6 +33,47 @@ final class AppRecordCacheTests: XCTestCase {
         XCTAssertEqual(loadedApps, apps)
     }
 
+    func testLoadsCurrentSchemaCacheWithoutDirectDownloadFlag() throws {
+        let cacheURL = temporaryCacheURL()
+        try FileManager.default.createDirectory(
+            at: cacheURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        let json = """
+        {
+          "apps" : [
+            {
+              "buildVersion" : "100",
+              "bundleIdentifier" : "com.example.test",
+              "id" : "com.example.test",
+              "installSource" : {
+                "homebrewCask" : {
+                  "token" : "test"
+                }
+              },
+              "name" : "Test",
+              "path" : "/Applications/Test.app",
+              "shortVersion" : "1.0",
+              "sizeBytes" : 123,
+              "updateStatus" : {
+                "notChecked" : {
+                }
+              },
+              "updateURL" : "https://example.com/download"
+            }
+          ],
+          "schemaVersion" : 2
+        }
+        """
+        try Data(json.utf8).write(to: cacheURL)
+        let cache = AppRecordCache(cacheURL: cacheURL)
+
+        let apps = try cache.load()
+
+        XCTAssertEqual(apps.count, 1)
+        XCTAssertFalse(apps[0].updateURLIsDirectDownload)
+    }
+
     func testIgnoresLegacyArrayCache() throws {
         let cacheURL = temporaryCacheURL()
         try FileManager.default.createDirectory(

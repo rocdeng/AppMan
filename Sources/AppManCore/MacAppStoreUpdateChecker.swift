@@ -55,6 +55,7 @@ public struct MacAppStoreUpdateChecker: AppUpdateChecking {
                         trackID: result.trackID,
                         trackViewURL: result.trackViewURL
                     )
+                    updatedApp.updateURLIsDirectDownload = false
                     if AppVersionComparator.isLatestVersion(result.version, newerThan: app.shortVersion) {
                         updatedApp.updateStatus = .updateAvailable(
                             installedVersion: app.shortVersion,

@@ -8,5 +8,6 @@
     "officialHost": "ccswitch.io"
   },
   "checks": [],
-  "updatePageURL": "https://ccswitch.io/en/"
+  "updatePageURL": "https://ccswitch.io/en/",
+  "download": null
 }

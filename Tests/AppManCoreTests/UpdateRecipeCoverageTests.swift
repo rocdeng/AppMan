@@ -20,6 +20,51 @@ final class UpdateRecipeCoverageTests: XCTestCase {
         XCTAssertEqual(missingBundleIdentifiers, [])
     }
 
+    func testBundledRecipesDeclareDownloadRules() throws {
+        let recipeDirectory = URL(fileURLWithPath: FileManager.default.currentDirectoryPath, isDirectory: true)
+            .appendingPathComponent("Resources/UpdateRecipes", isDirectory: true)
+        let recipeURLs = try FileManager.default.contentsOfDirectory(
+            at: recipeDirectory,
+            includingPropertiesForKeys: nil
+        )
+        .filter { $0.pathExtension == "json" }
+
+        let missingDownloadKeys = try recipeURLs.compactMap { url -> String? in
+            let data = try Data(contentsOf: url)
+            guard let object = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+                return url.lastPathComponent
+            }
+            return object.keys.contains("download") ? nil : url.lastPathComponent
+        }
+
+        XCTAssertEqual(missingDownloadKeys.sorted(), [])
+    }
+
+    func testKnownPublicRecipesDeclareVersionChecks() throws {
+        let recipeDirectory = URL(fileURLWithPath: FileManager.default.currentDirectoryPath, isDirectory: true)
+            .appendingPathComponent("Resources/UpdateRecipes", isDirectory: true)
+        let recipes = try FileUpdateRecipeStore(
+            builtInDirectoryURLs: [recipeDirectory],
+            userDirectoryURL: temporaryRecipeDirectory()
+        ).load()
+        let recipesByID = Dictionary(uniqueKeysWithValues: recipes.map { ($0.id, $0) })
+        let expectedCheckedRecipeIDs = [
+            "com.google.android.studio",
+            "com.google.Chrome",
+            "com.microsoft.edgemac",
+            "com.tencent.qq",
+            "com.tencent.Lemon",
+            "com.tencent.xinWeChat",
+            "dev.warp.Warp-Stable",
+        ]
+
+        let missingChecks = expectedCheckedRecipeIDs.filter { id in
+            recipesByID[id]?.checks.isEmpty != false
+        }
+
+        XCTAssertEqual(missingChecks, [])
+    }
+
     private var scannedSelfInstalledApps: [AppRecord] {
         [
             makeApp(name: "Android Studio", bundleIdentifier: "com.google.android.studio"),

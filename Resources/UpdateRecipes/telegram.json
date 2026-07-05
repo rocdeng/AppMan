@@ -17,5 +17,11 @@
       }
     }
   ],
-  "updatePageURL": "https://telegram.org/dl/macos"
+  "updatePageURL": "https://telegram.org/dl/macos",
+  "download": {
+    "url": null,
+    "sourceURL": "https://osx.telegram.org/updates/versions.xml",
+    "pattern": "url=\"([^\"]*Telegram-[^\"]+\\.app\\.zip)\"",
+    "urlGroup": 1
+  }
 }

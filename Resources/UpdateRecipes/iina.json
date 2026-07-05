@@ -17,5 +17,11 @@
       }
     }
   ],
-  "updatePageURL": "https://iina.io/"
+  "updatePageURL": "https://iina.io/",
+  "download": {
+    "url": null,
+    "sourceURL": "https://iina.io/",
+    "pattern": "href=\"([^\"]*IINA\\.v[0-9]+(?:\\.[0-9A-Za-z]+){1,5}\\.dmg)\"",
+    "urlGroup": 1
+  }
 }

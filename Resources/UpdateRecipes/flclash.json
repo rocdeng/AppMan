@@ -17,5 +17,11 @@
       }
     }
   ],
-  "updatePageURL": "https://github.com/chen08209/FlClash/releases/latest"
+  "updatePageURL": "https://github.com/chen08209/FlClash/releases/latest",
+  "download": {
+    "url": null,
+    "sourceURL": "https://api.github.com/repos/chen08209/FlClash/releases/latest",
+    "pattern": "\"browser_download_url\"\\s*:\\s*\"([^\"]*(?:macos|darwin|arm64)[^\"]*\\.(?:dmg|zip))\"",
+    "urlGroup": 1
+  }
 }

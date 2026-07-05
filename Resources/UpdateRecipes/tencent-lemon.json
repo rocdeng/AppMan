@@ -1,12 +1,27 @@
 {
   "id": "com.tencent.Lemon",
   "name": "Tencent Lemon",
-  "recipePrompt": "这个规则用于识别腾讯柠檬清理。官方页面 lemon.qq.com 容易只暴露 dmg 链接或资源名，当前不自动抽取版本。",
+  "recipePrompt": "这个规则用于识别腾讯柠檬清理。lemon.qq.com 页面包含多个历史 dmg，版本提取限定 Lemon<version>.dmg 文件名；候选包优先选和最新版本号匹配的 dmg。",
   "match": {
     "bundleIdentifier": "com.tencent.Lemon",
     "appName": "Tencent Lemon",
     "officialHost": "qq.com"
   },
-  "checks": [],
-  "updatePageURL": "https://lemon.qq.com/"
+  "checks": [
+    {
+      "url": "https://lemon.qq.com/",
+      "extract": {
+        "type": "regex",
+        "pattern": "Lemonv?([0-9]+(?:\\.[0-9A-Za-z]+){1,5})\\.dmg",
+        "versionGroup": 1
+      }
+    }
+  ],
+  "updatePageURL": "https://lemon.qq.com/",
+  "download": {
+    "url": null,
+    "sourceURL": "https://lemon.qq.com/",
+    "pattern": "href=\"([^\"]*Lemon[0-9]+(?:\\.[0-9A-Za-z]+){1,5}\\.dmg)\"",
+    "urlGroup": 1
+  }
 }

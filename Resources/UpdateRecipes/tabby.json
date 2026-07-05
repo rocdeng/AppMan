@@ -17,5 +17,11 @@
       }
     }
   ],
-  "updatePageURL": "https://github.com/Eugeny/tabby/releases"
+  "updatePageURL": "https://github.com/Eugeny/tabby/releases",
+  "download": {
+    "url": null,
+    "sourceURL": "https://api.github.com/repos/Eugeny/tabby/releases/latest",
+    "pattern": "\"browser_download_url\"\\s*:\\s*\"([^\"]*(?:mac|darwin)[^\"]*\\.(?:dmg|zip))\"",
+    "urlGroup": 1
+  }
 }

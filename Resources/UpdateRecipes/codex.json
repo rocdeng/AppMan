@@ -8,5 +8,6 @@
     "officialHost": "openai.com"
   },
   "checks": [],
-  "updatePageURL": "https://developers.openai.com/codex/app"
+  "updatePageURL": "https://developers.openai.com/codex/app",
+  "download": null
 }

@@ -1,5 +1,11 @@
 import AppManCore
+import AppKit
 import Foundation
+
+struct DownloadProgress: Equatable, Sendable {
+    let bytesReceived: Int64
+    let totalBytes: Int64?
+}
 
 @MainActor
 final class AppListViewModel: ObservableObject {
@@ -8,6 +14,8 @@ final class AppListViewModel: ObservableObject {
     @Published private(set) var isCheckingUpdates = false
     @Published private(set) var isUpdatingApp = false
     @Published private(set) var isUninstalling = false
+    @Published private(set) var updateProgressText: String?
+    @Published private(set) var statusMessage: String?
     @Published private(set) var ignoredApps: [IgnoredAppRecord] = []
     @Published var automaticallyChecksUpdatesOnLaunch = false
     @Published var tinyFishAPIKey = ""
@@ -26,6 +34,11 @@ final class AppListViewModel: ObservableObject {
     private let selfUpdateSourceStore: SelfUpdateSourceStore
     private let homebrewUpdater: HomebrewCaskUpdater
     private let appBundleReader: AppBundleReader
+    private let fileManager: FileManager
+    private let downloadsDirectory: URL?
+    private let downloadData: @Sendable (URL, @escaping @MainActor (DownloadProgress) async -> Void) async throws -> Data
+    private let revealDownloadedPackage: @MainActor (URL) -> Void
+    private var currentUpdateTask: Task<Bool, Never>?
 
     init(
         scanner: AppScanner = AppScanner(),
@@ -36,7 +49,16 @@ final class AppListViewModel: ObservableObject {
         preferencesStore: AppPreferencesStore = AppPreferencesStore(),
         selfUpdateSourceStore: SelfUpdateSourceStore = SelfUpdateSourceStore(),
         homebrewUpdater: HomebrewCaskUpdater = HomebrewCaskUpdater(),
-        appBundleReader: AppBundleReader = AppBundleReader()
+        appBundleReader: AppBundleReader = AppBundleReader(),
+        fileManager: FileManager = .default,
+        downloadsDirectory: URL? = nil,
+        downloadData: @escaping @Sendable (
+            URL,
+            @escaping @MainActor (DownloadProgress) async -> Void
+        ) async throws -> Data = defaultDownloadData,
+        revealDownloadedPackage: @escaping @MainActor (URL) -> Void = { url in
+            NSWorkspace.shared.activateFileViewerSelecting([url])
+        }
     ) {
         self.scanner = scanner
         self.installSourceResolver = installSourceResolver
@@ -47,6 +69,10 @@ final class AppListViewModel: ObservableObject {
         self.selfUpdateSourceStore = selfUpdateSourceStore
         self.homebrewUpdater = homebrewUpdater
         self.appBundleReader = appBundleReader
+        self.fileManager = fileManager
+        self.downloadsDirectory = downloadsDirectory
+        self.downloadData = downloadData
+        self.revealDownloadedPackage = revealDownloadedPackage
         ignoredApps = (try? ignoreListStore.load()) ?? []
         let preferences = (try? preferencesStore.load()) ?? AppPreferences()
         automaticallyChecksUpdatesOnLaunch = preferences.automaticallyChecksUpdatesOnLaunch
@@ -280,7 +306,11 @@ final class AppListViewModel: ObservableObject {
             return
         }
 
-        await updateApp(app, openURL: openURL, refreshAfterHomebrewUpdate: true)
+        currentUpdateTask = Task { @MainActor in
+            await updateApp(app, openURL: openURL, refreshAfterHomebrewUpdate: true)
+        }
+        _ = await currentUpdateTask?.value
+        currentUpdateTask = nil
     }
 
     func updateAll(openURL: @MainActor @escaping (URL) -> Void) async {
@@ -312,6 +342,14 @@ final class AppListViewModel: ObservableObject {
         }
     }
 
+    func cancelUpdate() {
+        currentUpdateTask?.cancel()
+    }
+
+    func clearStatusMessage() {
+        statusMessage = nil
+    }
+
     @discardableResult
     private func updateApp(
         _ app: AppRecord,
@@ -321,18 +359,76 @@ final class AppListViewModel: ObservableObject {
         switch app.installSource {
         case let .homebrewCask(token):
             return await updateHomebrewCask(token: token, refreshAfterUpdate: refreshAfterHomebrewUpdate)
-        case .macAppStore, .manual, .sparkle:
+        case .macAppStore:
             guard let updateURL = app.updateURL else {
                 errorMessage = "缺少更新地址"
                 return false
             }
             openURL(updateURL)
             return false
+        case .manual, .sparkle:
+            guard let updateURL = app.updateURL else {
+                errorMessage = "缺少下载地址"
+                return false
+            }
+
+            if Self.shouldDownloadPackage(for: app) {
+                return await downloadPackage(from: updateURL)
+            }
+
+            openURL(updateURL)
+            return false
         }
+    }
+
+    private func downloadPackage(from url: URL) async -> Bool {
+        isUpdatingApp = true
+        updateProgressText = "正在准备下载..."
+        errorMessage = nil
+        var didDownload = false
+
+        do {
+            let fileManager = self.fileManager
+            let downloadsDirectory = self.downloadsDirectory
+            let downloadData = self.downloadData
+            let downloadsURL = try await Task.detached(priority: .userInitiated) {
+                try Self.appManDownloadsDirectory(fileManager: fileManager, downloadsDirectory: downloadsDirectory)
+            }.value
+
+            updateProgressText = "正在下载安装包..."
+            let data = try await downloadData(url) { [weak self] progress in
+                self?.updateProgressText = Self.downloadProgressText(for: progress)
+            }
+
+            updateProgressText = "正在保存安装包..."
+            let destinationURL = try await Task.detached(priority: .userInitiated) {
+                let destinationURL = Self.uniqueDestinationURL(
+                    for: url,
+                    in: downloadsURL,
+                    fileManager: fileManager
+                )
+                try data.write(to: destinationURL, options: [.atomic])
+                return destinationURL
+            }.value
+
+            updateProgressText = "正在打开下载位置..."
+            revealDownloadedPackage(destinationURL)
+            didDownload = true
+        } catch where Self.isCancellation(error) {
+            statusMessage = "已取消下载"
+            didDownload = false
+        } catch {
+            errorMessage = "下载失败：\(error.localizedDescription)"
+        }
+
+        updateProgressText = nil
+        isUpdatingApp = false
+        return didDownload
     }
 
     private func updateHomebrewCask(token: String, refreshAfterUpdate: Bool) async -> Bool {
         isUpdatingApp = true
+        updateProgressText = "正在通过 Homebrew 更新 \(token)..."
         errorMessage = nil
         var didUpdate = false
 
@@ -343,6 +439,7 @@ final class AppListViewModel: ObservableObject {
             }.value
             didUpdate = true
             if refreshAfterUpdate {
+                updateProgressText = "正在刷新更新状态..."
                 await checkUpdates()
             }
         } catch CommandError.executableNotFound("brew") {
@@ -354,6 +451,7 @@ final class AppListViewModel: ObservableObject {
             errorMessage = error.localizedDescription
         }
 
+        updateProgressText = nil
         isUpdatingApp = false
         return didUpdate
     }
@@ -370,4 +468,110 @@ final class AppListViewModel: ObservableObject {
             return ignoredApp
         }
     }
+
+    nonisolated static func shouldDownloadPackage(for app: AppRecord) -> Bool {
+        guard let updateURL = app.updateURL else {
+            return false
+        }
+        return app.updateURLIsDirectDownload || isPackageURL(updateURL)
+    }
+
+    nonisolated private static func isPackageURL(_ url: URL) -> Bool {
+        ["dmg", "pkg", "zip"].contains(url.pathExtension.lowercased())
+    }
+
+    nonisolated private static func isCancellation(_ error: Error) -> Bool {
+        if error is CancellationError {
+            return true
+        }
+
+        guard let urlError = error as? URLError else {
+            return false
+        }
+        return urlError.code == .cancelled
+    }
+
+    nonisolated private static func appManDownloadsDirectory(
+        fileManager: FileManager,
+        downloadsDirectory: URL?
+    ) throws -> URL {
+        let downloadsURL = downloadsDirectory
+            ?? fileManager.urls(for: .downloadsDirectory, in: .userDomainMask).first
+            ?? URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Downloads", isDirectory: true)
+        let appManURL = downloadsURL.appendingPathComponent("AppMan", isDirectory: true)
+        try fileManager.createDirectory(at: appManURL, withIntermediateDirectories: true)
+        return appManURL
+    }
+
+    nonisolated static func downloadProgressText(for progress: DownloadProgress) -> String {
+        guard let totalBytes = progress.totalBytes, totalBytes > 0 else {
+            return "正在下载安装包...\n已下载 \(formatByteCount(progress.bytesReceived))"
+        }
+
+        let percentage = max(0, min(100, Int((Double(progress.bytesReceived) / Double(totalBytes) * 100).rounded())))
+        return "正在下载安装包...\n总大小 \(formatByteCount(totalBytes))，已下载 \(formatByteCount(progress.bytesReceived)) (\(percentage)%)"
+    }
+
+    nonisolated private static func formatByteCount(_ bytes: Int64) -> String {
+        ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file)
+    }
+
+    nonisolated private static func uniqueDestinationURL(
+        for sourceURL: URL,
+        in directoryURL: URL,
+        fileManager: FileManager
+    ) -> URL {
+        let filename = sourceURL.lastPathComponent.isEmpty ? "AppManDownload" : sourceURL.lastPathComponent
+        let baseURL = directoryURL.appendingPathComponent(filename)
+        guard fileManager.fileExists(atPath: baseURL.path) else {
+            return baseURL
+        }
+
+        let extensionName = baseURL.pathExtension
+        let stem = extensionName.isEmpty
+            ? baseURL.lastPathComponent
+            : baseURL.deletingPathExtension().lastPathComponent
+
+        for index in 2...999 {
+            let candidateName = extensionName.isEmpty
+                ? "\(stem)-\(index)"
+                : "\(stem)-\(index).\(extensionName)"
+            let candidateURL = directoryURL.appendingPathComponent(candidateName)
+            if !fileManager.fileExists(atPath: candidateURL.path) {
+                return candidateURL
+            }
+        }
+
+        return directoryURL.appendingPathComponent("\(UUID().uuidString)-\(filename)")
+    }
+}
+
+private let defaultDownloadData: @Sendable (
+    URL,
+    @escaping @MainActor (DownloadProgress) async -> Void
+) async throws -> Data = { url, reportProgress in
+    try await streamDownloadData(from: url, reportProgress: reportProgress)
+}
+
+private func streamDownloadData(
+    from url: URL,
+    reportProgress: @escaping @MainActor (DownloadProgress) async -> Void
+) async throws -> Data {
+    let (bytes, response) = try await URLSession.shared.bytes(from: url)
+    let totalBytes = (response.expectedContentLength > 0) ? response.expectedContentLength : nil
+    var data = Data()
+    var bytesReceived: Int64 = 0
+
+    for try await byte in bytes {
+        try Task.checkCancellation()
+        data.append(byte)
+        bytesReceived += 1
+
+        if bytesReceived == 1 || bytesReceived % 262_144 == 0 || bytesReceived == totalBytes {
+            await reportProgress(DownloadProgress(bytesReceived: bytesReceived, totalBytes: totalBytes))
+        }
+    }
+
+    await reportProgress(DownloadProgress(bytesReceived: bytesReceived, totalBytes: totalBytes))
+    return data
 }

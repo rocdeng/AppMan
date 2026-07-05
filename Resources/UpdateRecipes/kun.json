@@ -8,5 +8,6 @@
     "officialHost": "deepseek-gui.com"
   },
   "checks": [],
-  "updatePageURL": "https://deepseek-gui.com/"
+  "updatePageURL": "https://deepseek-gui.com/",
+  "download": null
 }

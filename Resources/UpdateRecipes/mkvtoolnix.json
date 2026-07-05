@@ -8,5 +8,6 @@
     "officialHost": "mkvtoolnix.download"
   },
   "checks": [],
-  "updatePageURL": "https://mkvtoolnix.download/macos/"
+  "updatePageURL": "https://mkvtoolnix.download/macos/",
+  "download": null
 }

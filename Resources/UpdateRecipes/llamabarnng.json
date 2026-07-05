@@ -17,5 +17,6 @@
       }
     }
   ],
-  "updatePageURL": "https://github.com/ggml-org/Llama-macOS/releases/latest"
+  "updatePageURL": "https://github.com/ggml-org/Llama-macOS/releases/latest",
+  "download": null
 }

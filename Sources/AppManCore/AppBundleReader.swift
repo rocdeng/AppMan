@@ -37,7 +37,8 @@ public struct AppBundleReader: @unchecked Sendable {
             sizeBytes: app.sizeBytes,
             installSource: app.installSource,
             updateStatus: app.updateStatus,
-            updateURL: app.updateURL
+            updateURL: app.updateURL,
+            updateURLIsDirectDownload: app.updateURLIsDirectDownload
         )
     }
 

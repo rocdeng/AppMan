@@ -17,5 +17,11 @@
       }
     }
   ],
-  "updatePageURL": "https://git-fork.com/"
+  "updatePageURL": "https://git-fork.com/",
+  "download": {
+    "url": null,
+    "sourceURL": "https://fork.dev/update/feed.xml",
+    "pattern": "url=\"([^\"]*Fork-[0-9]+(?:\\.[0-9A-Za-z]+){1,5}\\.dmg)\"",
+    "urlGroup": 1
+  }
 }

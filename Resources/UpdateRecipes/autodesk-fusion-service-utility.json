@@ -8,5 +8,6 @@
     "officialHost": "autodesk.com"
   },
   "checks": [],
-  "updatePageURL": "https://www.autodesk.com/products/fusion-360/overview"
+  "updatePageURL": "https://www.autodesk.com/products/fusion-360/overview",
+  "download": null
 }

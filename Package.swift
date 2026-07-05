@@ -23,6 +23,10 @@ let package = Package(
             resources: [
                 .copy("Fixtures")
             ]
+        ),
+        .testTarget(
+            name: "AppManAppTests",
+            dependencies: ["AppManApp", "AppManCore"]
         )
     ]
 )

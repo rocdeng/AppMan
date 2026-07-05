@@ -17,5 +17,11 @@
       }
     }
   ],
-  "updatePageURL": "https://www.codeweavers.com/crossover/download"
+  "updatePageURL": "https://www.codeweavers.com/crossover/download",
+  "download": {
+    "url": null,
+    "sourceURL": "https://www.codeweavers.com/xml/versions/cxmac.xml",
+    "pattern": "url=\"([^\"]*crossover-[0-9]+(?:\\.[0-9A-Za-z]+){1,5}\\.zip)\"",
+    "urlGroup": 1
+  }
 }

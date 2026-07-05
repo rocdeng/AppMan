@@ -17,5 +17,11 @@
       }
     }
   ],
-  "updatePageURL": "https://github.com/2dust/v2rayN/releases"
+  "updatePageURL": "https://github.com/2dust/v2rayN/releases",
+  "download": {
+    "url": null,
+    "sourceURL": "https://api.github.com/repos/2dust/v2rayN/releases/latest",
+    "pattern": "\"browser_download_url\"\\s*:\\s*\"([^\"]*(?:macos|osx|darwin)[^\"]*\\.(?:dmg|zip))\"",
+    "urlGroup": 1
+  }
 }

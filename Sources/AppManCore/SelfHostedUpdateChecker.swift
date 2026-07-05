@@ -190,15 +190,21 @@ public struct SelfHostedUpdateChecker: AppUpdateChecking {
     private func checkUpdate(for app: AppRecord, recipe: UpdateRecipe) -> AppRecord {
         var updatedApp = app
         updatedApp.updateURL = recipe.updatePageURL ?? recipe.checks.first?.url
+        updatedApp.updateURLIsDirectDownload = false
 
         do {
             let runner = UpdateRecipeRunner(fetchData: fetchData)
-            guard let latestVersion = try runner.latestVersion(using: recipe) else {
-                updatedApp.updateStatus = .undetectable
+            guard let release = try runner.latestRelease(using: recipe) else {
+                updatedApp.updateStatus = .needsManualUpdateURL
                 return updatedApp
             }
 
+            let latestVersion = release.latestVersion
             if AppVersionComparator.isLatestVersion(latestVersion, newerThan: app.shortVersion) {
+                if let packageURL = release.packageURL {
+                    updatedApp.updateURL = packageURL
+                    updatedApp.updateURLIsDirectDownload = true
+                }
                 updatedApp.updateStatus = .updateAvailable(
                     installedVersion: app.shortVersion,
                     latestVersion: latestVersion
@@ -233,6 +239,7 @@ public struct SelfHostedUpdateChecker: AppUpdateChecking {
     private func checkUpdate(for app: AppRecord, updateURL: URL) -> AppRecord {
         var updatedApp = app
         updatedApp.updateURL = updateURL
+        updatedApp.updateURLIsDirectDownload = false
 
         do {
             let data = try fetchData(updateURL)
@@ -243,6 +250,14 @@ public struct SelfHostedUpdateChecker: AppUpdateChecking {
             }
 
             if AppVersionComparator.isLatestVersion(latestVersion, newerThan: app.shortVersion) {
+                if let packageURL = PackageURLParser.bestPackageURL(
+                    in: html,
+                    baseURL: updateURL,
+                    latestVersion: latestVersion
+                ) {
+                    updatedApp.updateURL = packageURL
+                    updatedApp.updateURLIsDirectDownload = true
+                }
                 updatedApp.updateStatus = .updateAvailable(
                     installedVersion: app.shortVersion,
                     latestVersion: latestVersion
@@ -340,8 +355,8 @@ private extension URLSession {
 private enum WebPageVersionParser {
     static func latestVersion(in html: String) -> String? {
         let patterns = [
-            #"(?i)(?:latest\s+version|version|download|release)\D{0,32}v?([0-9]+(?:\.[0-9A-Za-z]+){1,5})"#,
-            #"(?i)\bv([0-9]+(?:\.[0-9A-Za-z]+){1,5})\b"#,
+            #"(?i)(?:latest\s+version|version|download|release)\D{0,32}v?([0-9]+(?:\.[0-9A-Za-z]+){1,5})(?=[^0-9A-Za-z]|$)"#,
+            #"(?i)\bv([0-9]+(?:\.[0-9A-Za-z]+){1,5})(?=[^0-9A-Za-z]|$)"#,
         ]
         var versions: [String] = []
 
@@ -355,12 +370,65 @@ private enum WebPageVersionParser {
                       let versionRange = Range(match.range(at: 1), in: html) else {
                     continue
                 }
-                versions.append(String(html[versionRange]))
+                versions.append(Self.normalizedVersion(String(html[versionRange])))
             }
         }
 
         return versions.max { first, second in
             first.compare(second, options: .numeric) == .orderedAscending
         }
+    }
+
+    private static func normalizedVersion(_ value: String) -> String {
+        value.replacingOccurrences(
+            of: #"(?i)\.(?:dmg|pkg|zip)$"#,
+            with: "",
+            options: .regularExpression
+        )
+    }
+}
+
+enum PackageURLParser {
+    static func bestPackageURL(in text: String, baseURL: URL, latestVersion: String? = nil) -> URL? {
+        let patterns = [
+            #"https?://[^\s"'<>]+?\.(?:dmg|pkg|zip)(?:\?[^\s"'<>]*)?"#,
+            #"href\s*=\s*["']([^"']+?\.(?:dmg|pkg|zip)(?:\?[^"']*)?)["']"#,
+        ]
+        let latestVersion = latestVersion?.lowercased()
+        var candidates: [URL] = []
+
+        for pattern in patterns {
+            guard let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]) else {
+                continue
+            }
+
+            let range = NSRange(text.startIndex..<text.endIndex, in: text)
+            for match in regex.matches(in: text, range: range) {
+                let captureIndex = match.numberOfRanges > 1 ? 1 : 0
+                guard let urlRange = Range(match.range(at: captureIndex), in: text) else {
+                    continue
+                }
+
+                let rawValue = String(text[urlRange])
+                    .replacingOccurrences(of: "&amp;", with: "&")
+                guard let url = URL(string: rawValue, relativeTo: baseURL)?.absoluteURL else {
+                    continue
+                }
+                candidates.append(url)
+            }
+        }
+
+        guard !candidates.isEmpty else {
+            return nil
+        }
+
+        if let latestVersion,
+           let versionedCandidate = candidates.first(where: {
+               $0.lastPathComponent.lowercased().contains(latestVersion)
+           }) {
+            return versionedCandidate
+        }
+
+        return candidates.first
     }
 }

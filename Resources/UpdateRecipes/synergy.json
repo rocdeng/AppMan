@@ -17,5 +17,6 @@
       }
     }
   ],
-  "updatePageURL": "https://symless.com/synergy/download"
+  "updatePageURL": "https://symless.com/synergy/download",
+  "download": null
 }

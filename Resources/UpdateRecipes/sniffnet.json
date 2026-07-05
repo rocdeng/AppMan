@@ -17,5 +17,11 @@
       }
     }
   ],
-  "updatePageURL": "https://github.com/gyulyvgc/sniffnet/releases"
+  "updatePageURL": "https://github.com/gyulyvgc/sniffnet/releases",
+  "download": {
+    "url": null,
+    "sourceURL": "https://api.github.com/repos/gyulyvgc/sniffnet/releases/latest",
+    "pattern": "\"browser_download_url\"\\s*:\\s*\"([^\"]*(?:macos|darwin|apple)[^\"]*\\.(?:dmg|zip))\"",
+    "urlGroup": 1
+  }
 }

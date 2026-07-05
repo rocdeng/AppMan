@@ -11,6 +11,7 @@ public struct AppRecord: Identifiable, Equatable, Sendable, Codable {
     public var installSource: InstallSource
     public var updateStatus: AppUpdateStatus
     public var updateURL: URL?
+    public var updateURLIsDirectDownload: Bool
 
     public init(
         id: String,
@@ -22,7 +23,8 @@ public struct AppRecord: Identifiable, Equatable, Sendable, Codable {
         sizeBytes: Int64,
         installSource: InstallSource = .manual(reason: "尚未识别到安装渠道"),
         updateStatus: AppUpdateStatus = .notChecked,
-        updateURL: URL? = nil
+        updateURL: URL? = nil,
+        updateURLIsDirectDownload: Bool = false
     ) {
         self.id = id
         self.name = name
@@ -34,6 +36,51 @@ public struct AppRecord: Identifiable, Equatable, Sendable, Codable {
         self.installSource = installSource
         self.updateStatus = updateStatus
         self.updateURL = updateURL
+        self.updateURLIsDirectDownload = updateURLIsDirectDownload
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id
+        case name
+        case bundleIdentifier
+        case shortVersion
+        case buildVersion
+        case path
+        case sizeBytes
+        case installSource
+        case updateStatus
+        case updateURL
+        case updateURLIsDirectDownload
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
+        name = try container.decode(String.self, forKey: .name)
+        bundleIdentifier = try container.decodeIfPresent(String.self, forKey: .bundleIdentifier)
+        shortVersion = try container.decodeIfPresent(String.self, forKey: .shortVersion)
+        buildVersion = try container.decodeIfPresent(String.self, forKey: .buildVersion)
+        path = try container.decode(URL.self, forKey: .path)
+        sizeBytes = try container.decode(Int64.self, forKey: .sizeBytes)
+        installSource = try container.decode(InstallSource.self, forKey: .installSource)
+        updateStatus = try container.decode(AppUpdateStatus.self, forKey: .updateStatus)
+        updateURL = try container.decodeIfPresent(URL.self, forKey: .updateURL)
+        updateURLIsDirectDownload = try container.decodeIfPresent(Bool.self, forKey: .updateURLIsDirectDownload) ?? false
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(name, forKey: .name)
+        try container.encodeIfPresent(bundleIdentifier, forKey: .bundleIdentifier)
+        try container.encodeIfPresent(shortVersion, forKey: .shortVersion)
+        try container.encodeIfPresent(buildVersion, forKey: .buildVersion)
+        try container.encode(path, forKey: .path)
+        try container.encode(sizeBytes, forKey: .sizeBytes)
+        try container.encode(installSource, forKey: .installSource)
+        try container.encode(updateStatus, forKey: .updateStatus)
+        try container.encodeIfPresent(updateURL, forKey: .updateURL)
+        try container.encode(updateURLIsDirectDownload, forKey: .updateURLIsDirectDownload)
     }
 }
 

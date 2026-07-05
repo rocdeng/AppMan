@@ -8,5 +8,6 @@
     "officialHost": "anthropic.com"
   },
   "checks": [],
-  "updatePageURL": "https://support.claude.com/"
+  "updatePageURL": "https://support.claude.com/",
+  "download": null
 }

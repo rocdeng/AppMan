@@ -1,12 +1,27 @@
 {
   "id": "com.tencent.qq",
   "name": "QQ",
-  "recipePrompt": "这个规则用于识别 QQ macOS 客户端。im.qq.com 下载页可见下载链接但容易混合 dmg 资源名和内部构建号，当前不自动抽取版本。",
+  "recipePrompt": "这个规则用于识别 QQ macOS 客户端。im.qq.com 页面同时保留旧 Catalyst beta dmg 和当前 QQNT 下载地址；版本提取和下载都必须限定 window.QQDownloadUrl 的 QQ_v<version>-<build>.dmg，避免误抓 beta 包。",
   "match": {
     "bundleIdentifier": "com.tencent.qq",
     "appName": "QQ",
     "officialHost": "qq.com"
   },
-  "checks": [],
-  "updatePageURL": "https://im.qq.com/macqq/index.shtml"
+  "checks": [
+    {
+      "url": "https://im.qq.com/macqq/index.shtml",
+      "extract": {
+        "type": "regex",
+        "pattern": "window\\.QQDownloadUrl\\s*=\\s*'[^']*QQ_v([0-9]+(?:\\.[0-9A-Za-z]+){1,5})-[0-9]+\\.dmg'",
+        "versionGroup": 1
+      }
+    }
+  ],
+  "updatePageURL": "https://im.qq.com/macqq/index.shtml",
+  "download": {
+    "url": null,
+    "sourceURL": "https://im.qq.com/macqq/index.shtml",
+    "pattern": "window\\.QQDownloadUrl\\s*=\\s*'([^']*QQ_v[0-9]+(?:\\.[0-9A-Za-z]+){1,5}-[0-9]+\\.dmg)'",
+    "urlGroup": 1
+  }
 }

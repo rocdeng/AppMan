@@ -1,12 +1,22 @@
 {
   "id": "dev.warp.Warp-Stable",
   "name": "Warp",
-  "recipePrompt": "这个规则用于识别 Warp Stable。Warp 官方下载页会包含脚本/资源版本号，通用解析曾误抽 60.js；当前不自动抽取版本，后续可接入 Warp 官方更新元数据后完善。",
+  "recipePrompt": "这个规则用于识别 Warp Stable。版本来自 warpdotdev/warp GitHub latest release 的 stable tag_name，例如 v0.2026.06.03.09.49.stable_00；GitHub release 当前不带 dmg asset，所以只能检测版本，下载/安装仍跳官网。",
   "match": {
     "bundleIdentifier": "dev.warp.Warp-Stable",
     "appName": "Warp",
     "officialHost": "warp.dev"
   },
-  "checks": [],
-  "updatePageURL": "https://www.warp.dev/"
+  "checks": [
+    {
+      "url": "https://api.github.com/repos/warpdotdev/warp/releases/latest",
+      "extract": {
+        "type": "regex",
+        "pattern": "\"tag_name\"\\s*:\\s*\"v?([0-9]+(?:\\.[0-9A-Za-z]+){1,5})\\.stable_[^\"]*\"",
+        "versionGroup": 1
+      }
+    }
+  ],
+  "updatePageURL": "https://www.warp.dev/",
+  "download": null
 }

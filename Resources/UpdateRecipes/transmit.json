@@ -8,5 +8,11 @@
     "officialHost": "panic.com"
   },
   "checks": [],
-  "updatePageURL": "https://www.panic.com/transmit/"
+  "updatePageURL": "https://www.panic.com/transmit/",
+  "download": {
+    "url": "https://download.panic.com/transmit/Transmit-5-Latest.zip",
+    "sourceURL": null,
+    "pattern": null,
+    "urlGroup": null
+  }
 }

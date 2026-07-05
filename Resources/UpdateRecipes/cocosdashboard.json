@@ -8,5 +8,6 @@
     "officialHost": "cocos.com"
   },
   "checks": [],
-  "updatePageURL": "https://www.cocos.com/en/creator-download"
+  "updatePageURL": "https://www.cocos.com/en/creator-download",
+  "download": null
 }

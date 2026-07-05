@@ -1,12 +1,27 @@
 {
   "id": "com.microsoft.edgemac",
   "name": "Microsoft Edge",
-  "recipePrompt": "这个规则用于识别 Microsoft Edge。Edge 更新需要专用微软更新/企业下载元数据并区分 channel，当前不从普通网页抽取版本。",
+  "recipePrompt": "这个规则用于识别 Microsoft Edge。版本和安装包来自微软官方 edgeupdates enterprise API，只取 Product=Stable、Platform=MacOS、Architecture=universal 的 pkg；页面顺序通常最新在前。",
   "match": {
     "bundleIdentifier": "com.microsoft.edgemac",
     "appName": "Microsoft Edge",
     "officialHost": "microsoft.com"
   },
-  "checks": [],
-  "updatePageURL": "https://www.microsoft.com/edge/download"
+  "checks": [
+    {
+      "url": "https://edgeupdates.microsoft.com/api/products?view=enterprise",
+      "extract": {
+        "type": "regex",
+        "pattern": "\"Product\"\\s*:\\s*\"Stable\"[\\s\\S]*?\"Platform\"\\s*:\\s*\"MacOS\"[\\s\\S]*?\"Architecture\"\\s*:\\s*\"universal\"[\\s\\S]*?\"ProductVersion\"\\s*:\\s*\"([0-9]+(?:\\.[0-9A-Za-z]+){1,5})\"",
+        "versionGroup": 1
+      }
+    }
+  ],
+  "updatePageURL": "https://www.microsoft.com/edge/download",
+  "download": {
+    "url": null,
+    "sourceURL": "https://edgeupdates.microsoft.com/api/products?view=enterprise",
+    "pattern": "\"Product\"\\s*:\\s*\"Stable\"[\\s\\S]*?\"Platform\"\\s*:\\s*\"MacOS\"[\\s\\S]*?\"Architecture\"\\s*:\\s*\"universal\"[\\s\\S]*?\"Location\"\\s*:\\s*\"([^\"]*MicrosoftEdge-[^\"]+\\.pkg)\"",
+    "urlGroup": 1
+  }
 }

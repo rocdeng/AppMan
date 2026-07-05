@@ -7,6 +7,7 @@ public struct UpdateRecipe: Codable, Equatable, Identifiable, Sendable {
     public let match: Match
     public let checks: [Check]
     public let updatePageURL: URL?
+    public let download: Download?
 
     public init(
         id: String,
@@ -14,7 +15,8 @@ public struct UpdateRecipe: Codable, Equatable, Identifiable, Sendable {
         recipePrompt: String?,
         match: Match,
         checks: [Check],
-        updatePageURL: URL?
+        updatePageURL: URL?,
+        download: Download? = nil
     ) {
         self.id = id
         self.name = name
@@ -22,6 +24,7 @@ public struct UpdateRecipe: Codable, Equatable, Identifiable, Sendable {
         self.match = match
         self.checks = checks
         self.updatePageURL = updatePageURL
+        self.download = download
     }
 
     public struct Match: Codable, Equatable, Sendable {
@@ -61,6 +64,20 @@ public struct UpdateRecipe: Codable, Equatable, Identifiable, Sendable {
     public enum ExtractType: String, Codable, Equatable, Sendable {
         case regex
         case linkRegex
+    }
+
+    public struct Download: Codable, Equatable, Sendable {
+        public let url: URL?
+        public let sourceURL: URL?
+        public let pattern: String?
+        public let urlGroup: Int?
+
+        public init(url: URL?, sourceURL: URL?, pattern: String?, urlGroup: Int?) {
+            self.url = url
+            self.sourceURL = sourceURL
+            self.pattern = pattern
+            self.urlGroup = urlGroup
+        }
     }
 }
 
@@ -140,24 +157,103 @@ extension FileUpdateRecipeStore: @unchecked Sendable {}
 struct UpdateRecipeRunner: Sendable {
     private let fetchData: @Sendable (URL) throws -> Data
 
+    struct Release: Equatable {
+        let latestVersion: String
+        let packageURL: URL?
+    }
+
     init(fetchData: @escaping @Sendable (URL) throws -> Data) {
         self.fetchData = fetchData
     }
 
     func latestVersion(using recipe: UpdateRecipe) throws -> String? {
+        try latestRelease(using: recipe)?.latestVersion
+    }
+
+    func latestRelease(using recipe: UpdateRecipe) throws -> Release? {
         var versions: [String] = []
+        var textsByURL: [(text: String, baseURL: URL)] = []
 
         for check in recipe.checks {
             let data = try fetchData(check.url)
             guard let text = String(data: data, encoding: .utf8) else {
                 continue
             }
+            textsByURL.append((text, check.url))
             versions.append(contentsOf: extractVersions(from: text, using: check.extract))
         }
 
-        return versions.max { first, second in
+        guard let latestVersion = versions.max(by: { first, second in
             first.compare(second, options: .numeric) == .orderedAscending
+        }) else {
+            return nil
         }
+
+        let packageURL = try explicitDownloadURL(from: recipe, latestVersion: latestVersion) ?? textsByURL.lazy.compactMap { text, baseURL in
+            PackageURLParser.bestPackageURL(in: text, baseURL: baseURL, latestVersion: latestVersion)
+        }.first
+
+        return Release(latestVersion: latestVersion, packageURL: packageURL)
+    }
+
+    private func explicitDownloadURL(from recipe: UpdateRecipe, latestVersion: String) throws -> URL? {
+        guard let download = recipe.download else {
+            return nil
+        }
+
+        if let url = download.url {
+            return url
+        }
+
+        guard let sourceURL = download.sourceURL,
+              let pattern = download.pattern else {
+            return nil
+        }
+
+        let data = try fetchData(sourceURL)
+        guard let text = String(data: data, encoding: .utf8),
+              let regex = try? NSRegularExpression(pattern: pattern) else {
+            return nil
+        }
+
+        let range = NSRange(text.startIndex..<text.endIndex, in: text)
+        let group = download.urlGroup ?? 1
+        var candidates: [URL] = []
+        for match in regex.matches(in: text, range: range) {
+            guard match.numberOfRanges > group,
+                  let urlRange = Range(match.range(at: group), in: text) else {
+                continue
+            }
+
+            let rawValue = String(text[urlRange])
+                .replacingOccurrences(of: "&amp;", with: "&")
+            if let url = URL(string: rawValue, relativeTo: sourceURL)?.absoluteURL {
+                candidates.append(url)
+            }
+        }
+
+        return Self.bestDownloadCandidate(candidates, latestVersion: latestVersion)
+    }
+
+    private static func bestDownloadCandidate(_ candidates: [URL], latestVersion: String) -> URL? {
+        guard !candidates.isEmpty else {
+            return nil
+        }
+
+        let versionForms = Set([
+            latestVersion,
+            latestVersion.replacingOccurrences(of: ".", with: "_"),
+            latestVersion.replacingOccurrences(of: ".", with: ""),
+        ].map { $0.lowercased() })
+
+        if let matched = candidates.first(where: { candidate in
+            let path = candidate.lastPathComponent.lowercased()
+            return versionForms.contains { path.contains($0) }
+        }) {
+            return matched
+        }
+
+        return candidates.first
     }
 
     private func extractVersions(from text: String, using extract: UpdateRecipe.Extract) -> [String] {

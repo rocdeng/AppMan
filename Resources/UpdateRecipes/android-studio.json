@@ -1,12 +1,27 @@
 {
   "id": "com.google.android.studio",
   "name": "Android Studio",
-  "recipePrompt": "这个规则用于识别 Android Studio。Android Studio 官方下载页是 developer.android.com/studio，但页面会混合稳定版、预览版、构建号和 Android Gradle Plugin 版本，当前规则先不自动抽取版本，避免把 2026.1.1 这类预览/渠道版本误报为当前稳定更新。",
+  "recipePrompt": "这个规则用于识别 Android Studio。官网 developer.android.com/studio 的稳定版下载弹窗包含 macOS dmg 链接，路径中带完整版本号，例如 /android/studio/install/2026.1.1.10/android-studio-...-mac_arm.dmg。版本提取必须限定在 mac_arm dmg 下载链接上，避免抓到 Linux、ChromeOS 或页面里其它工具版本。",
   "match": {
     "bundleIdentifier": "com.google.android.studio",
     "appName": "Android Studio",
     "officialHost": "developer.android.com"
   },
-  "checks": [],
-  "updatePageURL": "https://developer.android.com/studio"
+  "checks": [
+    {
+      "url": "https://developer.android.com/studio",
+      "extract": {
+        "type": "regex",
+        "pattern": "https://edgedl\\.me\\.gvt1\\.com/android/studio/install/([0-9]+(?:\\.[0-9A-Za-z]+){1,5})/android-studio-[^\\\"']+-mac_arm\\.dmg",
+        "versionGroup": 1
+      }
+    }
+  ],
+  "updatePageURL": "https://developer.android.com/studio",
+  "download": {
+    "url": null,
+    "sourceURL": "https://developer.android.com/studio",
+    "pattern": "(https://edgedl\\.me\\.gvt1\\.com/android/studio/install/[0-9]+(?:\\.[0-9A-Za-z]+){1,5}/android-studio-[^\\\"']+-mac_arm\\.dmg)",
+    "urlGroup": 1
+  }
 }

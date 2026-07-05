@@ -17,5 +17,11 @@
       }
     }
   ],
-  "updatePageURL": "https://github.com/waydabber/BetterDisplay/releases/latest"
+  "updatePageURL": "https://github.com/waydabber/BetterDisplay/releases/latest",
+  "download": {
+    "url": null,
+    "sourceURL": "https://api.github.com/repos/waydabber/BetterDisplay/releases/latest",
+    "pattern": "\"browser_download_url\"\\s*:\\s*\"([^\"]*\\.dmg)\"",
+    "urlGroup": 1
+  }
 }

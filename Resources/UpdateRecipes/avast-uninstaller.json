@@ -8,5 +8,6 @@
     "officialHost": "avast.com"
   },
   "checks": [],
-  "updatePageURL": "https://support.avast.com/article/uninstall-mac-security/"
+  "updatePageURL": "https://support.avast.com/article/uninstall-mac-security/",
+  "download": null
 }

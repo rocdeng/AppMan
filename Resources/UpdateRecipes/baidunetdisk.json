@@ -8,5 +8,6 @@
     "officialHost": "baidu.com"
   },
   "checks": [],
-  "updatePageURL": "https://pan.baidu.com/download"
+  "updatePageURL": "https://pan.baidu.com/download",
+  "download": null
 }

@@ -8,5 +8,6 @@
     "officialHost": "devin.ai"
   },
   "checks": [],
-  "updatePageURL": "https://devin.ai/download/"
+  "updatePageURL": "https://devin.ai/download/",
+  "download": null
 }

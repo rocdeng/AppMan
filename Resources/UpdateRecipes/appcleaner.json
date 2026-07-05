@@ -25,5 +25,11 @@
       }
     }
   ],
-  "updatePageURL": "https://freemacsoft.net/appcleaner/"
+  "updatePageURL": "https://freemacsoft.net/appcleaner/",
+  "download": {
+    "url": null,
+    "sourceURL": "https://freemacsoft.net/appcleaner/",
+    "pattern": "href=\"([^\"]*AppCleaner_[0-9]+(?:\\.[0-9A-Za-z]+){1,5}\\.zip)\"",
+    "urlGroup": 1
+  }
 }

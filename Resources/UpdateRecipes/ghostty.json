@@ -17,5 +17,11 @@
       }
     }
   ],
-  "updatePageURL": "https://ghostty.org/download"
+  "updatePageURL": "https://ghostty.org/download",
+  "download": {
+    "url": null,
+    "sourceURL": "https://ghostty.org/download",
+    "pattern": "href=\"([^\"]*Ghostty\\.dmg)\"",
+    "urlGroup": 1
+  }
 }

@@ -8,5 +8,6 @@
     "officialHost": "vivo.com"
   },
   "checks": [],
-  "updatePageURL": null
+  "updatePageURL": null,
+  "download": null
 }

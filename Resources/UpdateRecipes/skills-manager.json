@@ -8,5 +8,6 @@
     "officialHost": null
   },
   "checks": [],
-  "updatePageURL": null
+  "updatePageURL": null,
+  "download": null
 }

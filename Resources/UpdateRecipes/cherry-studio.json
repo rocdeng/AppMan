@@ -17,5 +17,11 @@
       }
     }
   ],
-  "updatePageURL": "https://github.com/CherryHQ/cherry-studio/releases"
+  "updatePageURL": "https://github.com/CherryHQ/cherry-studio/releases",
+  "download": {
+    "url": null,
+    "sourceURL": "https://api.github.com/repos/CherryHQ/cherry-studio/releases/latest",
+    "pattern": "\"browser_download_url\"\\s*:\\s*\"([^\"]*arm64\\.dmg)\"",
+    "urlGroup": 1
+  }
 }

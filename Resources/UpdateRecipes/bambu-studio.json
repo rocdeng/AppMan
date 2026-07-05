@@ -17,5 +17,11 @@
       }
     }
   ],
-  "updatePageURL": "https://github.com/bambulab/BambuStudio/releases/latest"
+  "updatePageURL": "https://github.com/bambulab/BambuStudio/releases/latest",
+  "download": {
+    "url": null,
+    "sourceURL": "https://api.github.com/repos/bambulab/BambuStudio/releases/latest",
+    "pattern": "\"browser_download_url\"\\s*:\\s*\"([^\"]*(?:mac|osx|darwin)[^\"]*\\.(?:dmg|zip))\"",
+    "urlGroup": 1
+  }
 }

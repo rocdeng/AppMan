@@ -17,5 +17,11 @@
       }
     }
   ],
-  "updatePageURL": "https://github.com/exelban/stats/releases"
+  "updatePageURL": "https://github.com/exelban/stats/releases",
+  "download": {
+    "url": null,
+    "sourceURL": "https://api.github.com/repos/exelban/stats/releases/latest",
+    "pattern": "\"browser_download_url\"\\s*:\\s*\"([^\"]*\\.dmg)\"",
+    "urlGroup": 1
+  }
 }

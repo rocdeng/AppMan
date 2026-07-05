@@ -46,6 +46,7 @@ public struct HomebrewCaskUpdateChecker: AppUpdateChecking {
             }
 
             updatedApp.updateURL = Self.caskPageURL(for: token)
+            updatedApp.updateURLIsDirectDownload = false
 
             if let checkFailureMessage {
                 updatedApp.updateStatus = .checkFailed(message: checkFailureMessage)

@@ -8,5 +8,6 @@
     "officialHost": "unsloth.ai"
   },
   "checks": [],
-  "updatePageURL": "https://unsloth.ai/docs/new/studio"
+  "updatePageURL": "https://unsloth.ai/docs/new/studio",
+  "download": null
 }

@@ -17,5 +17,11 @@
       }
     }
   ],
-  "updatePageURL": "https://godotengine.org/download/macos/"
+  "updatePageURL": "https://godotengine.org/download/macos/",
+  "download": {
+    "url": null,
+    "sourceURL": "https://api.github.com/repos/godotengine/godot/releases/latest",
+    "pattern": "\"browser_download_url\"\\s*:\\s*\"([^\"]*macos[^\"]*\\.zip)\"",
+    "urlGroup": 1
+  }
 }

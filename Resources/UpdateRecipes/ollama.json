@@ -17,5 +17,11 @@
       }
     }
   ],
-  "updatePageURL": "https://ollama.com/download/mac"
+  "updatePageURL": "https://ollama.com/download/mac",
+  "download": {
+    "url": null,
+    "sourceURL": "https://api.github.com/repos/ollama/ollama/releases/latest",
+    "pattern": "\"browser_download_url\"\\s*:\\s*\"([^\"]*darwin[^\"]*\\.(?:zip|dmg))\"",
+    "urlGroup": 1
+  }
 }

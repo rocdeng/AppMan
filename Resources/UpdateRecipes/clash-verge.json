@@ -17,5 +17,11 @@
       }
     }
   ],
-  "updatePageURL": "https://github.com/clash-verge-rev/clash-verge-rev/releases"
+  "updatePageURL": "https://github.com/clash-verge-rev/clash-verge-rev/releases",
+  "download": {
+    "url": null,
+    "sourceURL": "https://api.github.com/repos/clash-verge-rev/clash-verge-rev/releases/latest",
+    "pattern": "\"browser_download_url\"\\s*:\\s*\"([^\"]*(?:aarch64|arm64|macos|darwin)[^\"]*\\.(?:dmg|zip))\"",
+    "urlGroup": 1
+  }
 }

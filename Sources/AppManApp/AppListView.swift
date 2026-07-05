@@ -109,16 +109,13 @@ struct AppListView: View {
         )
         .overlay {
             if viewModel.isScanning || viewModel.isCheckingUpdates || viewModel.isUpdatingApp || viewModel.isUninstalling {
-                ZStack {
-                    Color.black.opacity(0.08)
-                    ProgressView(progressText)
-                        .padding(20)
-                        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8))
+                ProgressOverlay(text: progressText) {
+                    viewModel.cancelUpdate()
                 }
             }
         }
         .alert(
-            "扫描失败",
+            "操作失败",
             isPresented: Binding(
                 get: { viewModel.errorMessage != nil },
                 set: { isPresented in
@@ -131,6 +128,24 @@ struct AppListView: View {
             Button("好", role: .cancel) {}
         } message: {
             Text(viewModel.errorMessage ?? "未知错误")
+        }
+        .overlay(alignment: .top) {
+            if let statusMessage = viewModel.statusMessage {
+                Text(statusMessage)
+                    .font(.system(size: 13))
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 8)
+                    .background(.regularMaterial, in: Capsule())
+                    .padding(.top, AppLayout.titlebarHeight + AppLayout.toolbarHeight + 8)
+                    .onAppear {
+                        Task {
+                            try? await Task.sleep(nanoseconds: 1_600_000_000)
+                            await MainActor.run {
+                                viewModel.clearStatusMessage()
+                            }
+                        }
+                    }
+            }
         }
         .sheet(isPresented: $isShowingAppInfo) {
             if let selectedApp {
@@ -185,7 +200,7 @@ struct AppListView: View {
             return "正在检查更新..."
         }
         if viewModel.isUpdatingApp {
-            return "正在更新..."
+            return viewModel.updateProgressText ?? "正在更新..."
         }
         return "正在卸载..."
     }
@@ -275,6 +290,57 @@ struct AppListView: View {
     }
 }
 
+private struct ProgressOverlay: View {
+    let text: String
+    let cancel: () -> Void
+
+    var body: some View {
+        ZStack {
+            Color.black.opacity(0.08)
+            ProgressView(text)
+                .padding(20)
+                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8))
+        }
+        .background(EscapeKeyCatcher(action: cancel).frame(width: 0, height: 0))
+    }
+}
+
+private struct EscapeKeyCatcher: NSViewRepresentable {
+    let action: () -> Void
+
+    func makeNSView(context: Context) -> EscapeKeyView {
+        let view = EscapeKeyView()
+        view.action = action
+        DispatchQueue.main.async {
+            view.window?.makeFirstResponder(view)
+        }
+        return view
+    }
+
+    func updateNSView(_ nsView: EscapeKeyView, context: Context) {
+        nsView.action = action
+        DispatchQueue.main.async {
+            nsView.window?.makeFirstResponder(nsView)
+        }
+    }
+}
+
+private final class EscapeKeyView: NSView {
+    var action: (() -> Void)?
+
+    override var acceptsFirstResponder: Bool {
+        true
+    }
+
+    override func keyDown(with event: NSEvent) {
+        if event.keyCode == 53 {
+            action?()
+            return
+        }
+        super.keyDown(with: event)
+    }
+}
+
 private struct AppChromeView: View {
     @Binding var selectedSection: AppSection
     @Binding var searchText: String
@@ -343,7 +409,7 @@ private struct AppChromeView: View {
                 )
                 .position(
                     x: proxy.size.width - (isSearchExpanded ? 143 : 24),
-                    y: 23
+                    y: 20
                 )
 
                 if showsHeader {
@@ -446,7 +512,7 @@ private struct SelfUpdateURLDialog: View {
         case let .needsOfficialWebsiteConfirmation(candidateURL):
             _urlText = State(initialValue: candidateURL.absoluteString)
         default:
-            _urlText = State(initialValue: "")
+            _urlText = State(initialValue: app.updateURL?.absoluteString ?? "")
         }
     }
 
@@ -1048,11 +1114,11 @@ private struct LiquidSearchControl: View {
                     }
                 }
                 .padding(.horizontal, 12)
-                .frame(width: 238, height: 44)
-                .background(Color.white.opacity(0.94), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+                .frame(width: 238, height: 36)
+                .background(Color.white.opacity(0.94), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
                 .overlay {
-                    RoundedRectangle(cornerRadius: 22, style: .continuous)
-                        .stroke(isFocused ? Color.accentColor.opacity(0.78) : Color.primary.opacity(0.08), lineWidth: isFocused ? 4 : 1)
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        .stroke(isFocused ? Color.accentColor.opacity(0.78) : Color.primary.opacity(0.08), lineWidth: isFocused ? 3 : 1)
                 }
                 .shadow(color: Color.black.opacity(0.08), radius: 12, x: 0, y: 3)
                 .onAppear {
@@ -1827,9 +1893,9 @@ private struct AppCatalogTableView: NSViewRepresentable {
         context.coordinator.updateApp = updateApp
         context.coordinator.editSelfUpdateURLHandler = editSelfUpdateURL
         context.coordinator.ignoreUpdates = ignoreUpdates
-        context.coordinator.tableView?.reloadData()
+        context.coordinator.reloadData()
         context.coordinator.updateTableFrame(topInset: topInset)
-        context.coordinator.syncSelection()
+        context.coordinator.syncSelection(scrollToSelection: true)
     }
 
     private static func makeColumns() -> [NSTableColumn] {
@@ -1858,6 +1924,7 @@ private struct AppCatalogTableView: NSViewRepresentable {
         weak var scrollView: NSScrollView?
         weak var documentView: AppTableDocumentView?
         weak var tableView: NSTableView?
+        private var isSyncingSelection = false
 
         init(
             selectedAppID: Binding<AppRecord.ID?>,
@@ -1876,6 +1943,10 @@ private struct AppCatalogTableView: NSViewRepresentable {
         }
 
         func tableViewSelectionDidChange(_ notification: Notification) {
+            guard !isSyncingSelection else {
+                return
+            }
+
             guard let tableView = notification.object as? NSTableView else {
                 return
             }
@@ -1916,6 +1987,12 @@ private struct AppCatalogTableView: NSViewRepresentable {
             return menu
         }
 
+        func reloadData() {
+            isSyncingSelection = true
+            tableView?.reloadData()
+            isSyncingSelection = false
+        }
+
         func tableView(_ tableView: NSTableView, viewFor tableColumn: NSTableColumn?, row: Int) -> NSView? {
             guard apps.indices.contains(row), let columnID = tableColumn?.identifier.rawValue else {
                 return nil
@@ -1948,19 +2025,27 @@ private struct AppCatalogTableView: NSViewRepresentable {
             }
         }
 
-        func syncSelection() {
+        func syncSelection(scrollToSelection: Bool = false) {
             guard let tableView else {
                 return
             }
 
             guard let selectedID = selectedAppID.wrappedValue,
                   let row = apps.firstIndex(where: { $0.id == selectedID }) else {
+                isSyncingSelection = true
                 tableView.deselectAll(nil)
+                isSyncingSelection = false
                 return
             }
 
+            isSyncingSelection = true
             if tableView.selectedRow != row {
                 tableView.selectRowIndexes(IndexSet(integer: row), byExtendingSelection: false)
+            }
+            isSyncingSelection = false
+
+            if scrollToSelection {
+                tableView.scrollRowToVisible(row)
             }
         }
 

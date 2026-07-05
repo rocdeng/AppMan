@@ -45,6 +45,30 @@ final class SelfHostedUpdateCheckerTests: XCTestCase {
             .updateAvailable(installedVersion: "2.3.0", latestVersion: "2.4.0")
         )
         XCTAssertEqual(apps.first?.updateURL, URL(string: "https://example.com/download"))
+        XCTAssertEqual(apps.first?.updateURLIsDirectDownload, false)
+    }
+
+    func testUsesLatestPackageURLFromSavedUpdatePageWhenAvailable() throws {
+        let store = SelfUpdateSourceStore(storeURL: temporaryURL())
+        try store.save(SelfUpdateSourceRecord(app: makeManualApp(), updateURL: URL(string: "https://example.com/download")!))
+        let checker = SelfHostedUpdateChecker(
+            sourceStore: store,
+            googleSearcher: StubSelfUpdateSearcher(result: nil),
+            fetchData: { _ in Data("""
+            <h1>Manual</h1>
+            <p>Download version 2.4.0</p>
+            <a href="/downloads/Manual-2.4.0.dmg">Download for macOS</a>
+            """.utf8) }
+        )
+
+        let apps = try checker.checkUpdates(for: [makeManualApp(shortVersion: "2.3.0")])
+
+        XCTAssertEqual(
+            apps.first?.updateStatus,
+            .updateAvailable(installedVersion: "2.3.0", latestVersion: "2.4.0")
+        )
+        XCTAssertEqual(apps.first?.updateURL, URL(string: "https://example.com/downloads/Manual-2.4.0.dmg"))
+        XCTAssertEqual(apps.first?.updateURLIsDirectDownload, true)
     }
 
     func testUsesRecipeToDetectLatestVersionWithoutSearching() throws {
@@ -67,7 +91,13 @@ final class SelfHostedUpdateCheckerTests: XCTestCase {
                     )
                 ),
             ],
-            updatePageURL: URL(string: "https://freemacsoft.net/appcleaner/")!
+            updatePageURL: URL(string: "https://freemacsoft.net/appcleaner/")!,
+            download: UpdateRecipe.Download(
+                url: nil,
+                sourceURL: URL(string: "https://freemacsoft.net/appcleaner/")!,
+                pattern: #"href="([^"]*AppCleaner_3\.6\.8\.zip)""#,
+                urlGroup: 1
+            )
         )
         let checker = SelfHostedUpdateChecker(
             sourceStore: SelfUpdateSourceStore(storeURL: temporaryURL()),
@@ -78,6 +108,7 @@ final class SelfHostedUpdateCheckerTests: XCTestCase {
                 return Data("""
                 <h3>Downloads</h3>
                 <strong>Version 3.6.8</strong>
+                <a href="/appcleaner/AppCleaner_3.6.8.zip">Download</a>
                 <strong>Version 3.6</strong>
                 """.utf8)
             }
@@ -89,10 +120,59 @@ final class SelfHostedUpdateCheckerTests: XCTestCase {
             apps.first?.updateStatus,
             .updateAvailable(installedVersion: "3.6", latestVersion: "3.6.8")
         )
-        XCTAssertEqual(apps.first?.updateURL, URL(string: "https://freemacsoft.net/appcleaner/"))
+        XCTAssertEqual(apps.first?.updateURL, URL(string: "https://freemacsoft.net/appcleaner/AppCleaner_3.6.8.zip"))
+        XCTAssertEqual(apps.first?.updateURLIsDirectDownload, true)
     }
 
-    func testEmptyRecipeMarksAppAsUndetectableWithoutSearching() throws {
+    func testExplicitRecipeDownloadPrefersPackageMatchingLatestVersion() throws {
+        let recipe = UpdateRecipe(
+            id: "com.example.manual",
+            name: "Manual",
+            recipePrompt: "Prefer the package URL matching the latest detected version.",
+            match: UpdateRecipe.Match(
+                bundleIdentifier: "com.example.manual",
+                appName: "Manual",
+                officialHost: "example.com"
+            ),
+            checks: [
+                UpdateRecipe.Check(
+                    url: URL(string: "https://example.com/appcast.xml")!,
+                    extract: UpdateRecipe.Extract(
+                        type: .regex,
+                        pattern: #"sparkle:version="([0-9]+(?:\.[0-9A-Za-z]+){1,5})""#,
+                        versionGroup: 1
+                    )
+                ),
+            ],
+            updatePageURL: URL(string: "https://example.com/download")!,
+            download: UpdateRecipe.Download(
+                url: nil,
+                sourceURL: URL(string: "https://example.com/appcast.xml")!,
+                pattern: #"url="([^"]*Manual-[^"]+\.zip)""#,
+                urlGroup: 1
+            )
+        )
+        let checker = SelfHostedUpdateChecker(
+            sourceStore: SelfUpdateSourceStore(storeURL: temporaryURL()),
+            googleSearcher: FailingSelfUpdateSearcher(),
+            recipeStore: StubUpdateRecipeStore(recipes: [recipe]),
+            fetchData: { _ in Data("""
+            <enclosure url="https://example.com/Manual-1_0_0.zip" sparkle:version="1.0.0" />
+            <enclosure url="https://example.com/Manual-2_0_0.zip" sparkle:version="2.0.0" />
+            """.utf8) }
+        )
+
+        let apps = try checker.checkUpdates(for: [makeManualApp(shortVersion: "1.0.0")])
+
+        XCTAssertEqual(
+            apps.first?.updateStatus,
+            .updateAvailable(installedVersion: "1.0.0", latestVersion: "2.0.0")
+        )
+        XCTAssertEqual(apps.first?.updateURL, URL(string: "https://example.com/Manual-2_0_0.zip"))
+        XCTAssertEqual(apps.first?.updateURLIsDirectDownload, true)
+    }
+
+    func testEmptyRecipeFallsBackToManualInputWithoutSearching() throws {
         let recipe = UpdateRecipe(
             id: "com.example.manual",
             name: "Manual",
@@ -103,7 +183,7 @@ final class SelfHostedUpdateCheckerTests: XCTestCase {
                 officialHost: nil
             ),
             checks: [],
-            updatePageURL: nil
+            updatePageURL: URL(string: "https://example.com/download")!
         )
         let checker = SelfHostedUpdateChecker(
             sourceStore: SelfUpdateSourceStore(storeURL: temporaryURL()),
@@ -117,8 +197,8 @@ final class SelfHostedUpdateCheckerTests: XCTestCase {
 
         let apps = try checker.checkUpdates(for: [makeManualApp()])
 
-        XCTAssertEqual(apps.first?.updateStatus, .undetectable)
-        XCTAssertNil(apps.first?.updateURL)
+        XCTAssertEqual(apps.first?.updateStatus, .needsManualUpdateURL)
+        XCTAssertEqual(apps.first?.updateURL, URL(string: "https://example.com/download"))
     }
 
     func testMarksSavedUpdateURLAsUndetectableWhenPageHasNoVersion() throws {

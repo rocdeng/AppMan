@@ -25,5 +25,11 @@
       }
     }
   ],
-  "updatePageURL": "https://www.scootersoftware.com/download"
+  "updatePageURL": "https://www.scootersoftware.com/download",
+  "download": {
+    "url": null,
+    "sourceURL": "https://www.scootersoftware.com/download",
+    "pattern": "href=\"([^\"]*BCompareOSX-[0-9]+(?:\\.[0-9A-Za-z]+){1,5}\\.[0-9]+\\.zip)\"",
+    "urlGroup": 1
+  }
 }

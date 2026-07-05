@@ -17,5 +17,11 @@
       }
     }
   ],
-  "updatePageURL": "https://www.keka.io/en/"
+  "updatePageURL": "https://www.keka.io/en/",
+  "download": {
+    "url": null,
+    "sourceURL": "https://u.keka.io",
+    "pattern": "url=\"([^\"]*Keka-[0-9]+(?:\\.[0-9A-Za-z]+){1,5}\\.zip)\"",
+    "urlGroup": 1
+  }
 }

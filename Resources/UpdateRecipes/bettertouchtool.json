@@ -17,5 +17,11 @@
       }
     }
   ],
-  "updatePageURL": "https://folivora.ai/releases/"
+  "updatePageURL": "https://folivora.ai/releases/",
+  "download": {
+    "url": null,
+    "sourceURL": "https://folivora.ai/releases/",
+    "pattern": "href=\"([^\"]*btt[0-9]+(?:\\.[0-9]+)+-[0-9]+(?:-(?:arm64|intel))?\\.zip)\"",
+    "urlGroup": 1
+  }
 }

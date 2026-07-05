@@ -8,5 +8,6 @@
     "officialHost": "larksuite.com"
   },
   "checks": [],
-  "updatePageURL": "https://www.larksuite.com/en_us/download"
+  "updatePageURL": "https://www.larksuite.com/en_us/download",
+  "download": null
 }

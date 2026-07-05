@@ -17,5 +17,11 @@
       }
     }
   ],
-  "updatePageURL": "https://github.com/highagency/pencil-desktop-releases/releases/latest"
+  "updatePageURL": "https://github.com/highagency/pencil-desktop-releases/releases/latest",
+  "download": {
+    "url": null,
+    "sourceURL": "https://api.github.com/repos/highagency/pencil-desktop-releases/releases/latest",
+    "pattern": "\"browser_download_url\"\\s*:\\s*\"([^\"]*(?:mac|darwin)[^\"]*\\.(?:dmg|zip))\"",
+    "urlGroup": 1
+  }
 }

@@ -24,6 +24,7 @@ public struct SparkleAppcastUpdateChecker: AppUpdateChecking {
     private func checkUpdate(for app: AppRecord, feedURL: URL) throws -> AppRecord {
         var updatedApp = app
         updatedApp.updateURL = feedURL
+        updatedApp.updateURLIsDirectDownload = false
 
         do {
             let data = try fetchData(feedURL)

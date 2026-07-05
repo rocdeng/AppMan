@@ -1,12 +1,27 @@
 {
   "id": "com.tencent.xinWeChat",
   "name": "WeChat",
-  "recipePrompt": "这个规则用于识别微信 macOS 客户端。微信官方页面和下载入口不稳定暴露可比较 app 版本，当前不自动抽取版本。",
+  "recipePrompt": "这个规则用于识别微信 macOS 客户端。mac.weixin.qq.com 页面包含很多 SVG/脚本噪声数字，版本提取必须限定 WeChatMac_<version>.dmg 下载链接或下载按钮附近的 macVersion 字段。",
   "match": {
     "bundleIdentifier": "com.tencent.xinWeChat",
     "appName": "WeChat",
     "officialHost": "wechat.com"
   },
-  "checks": [],
-  "updatePageURL": "https://mac.weixin.qq.com/"
+  "checks": [
+    {
+      "url": "https://mac.weixin.qq.com/",
+      "extract": {
+        "type": "regex",
+        "pattern": "WeChatMac_([0-9]+(?:\\.[0-9A-Za-z]+){1,5})\\.dmg",
+        "versionGroup": 1
+      }
+    }
+  ],
+  "updatePageURL": "https://mac.weixin.qq.com/",
+  "download": {
+    "url": null,
+    "sourceURL": "https://mac.weixin.qq.com/",
+    "pattern": "(https://dldir[^\\\"']+/weixin/Universal/Mac/WeChatMac_[0-9]+(?:\\.[0-9A-Za-z]+){1,5}\\.dmg)",
+    "urlGroup": 1
+  }
 }

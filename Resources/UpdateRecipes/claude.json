@@ -8,5 +8,6 @@
     "officialHost": "claude.com"
   },
   "checks": [],
-  "updatePageURL": "https://support.claude.com/en/articles/10065433-install-claude-desktop"
+  "updatePageURL": "https://support.claude.com/en/articles/10065433-install-claude-desktop",
+  "download": null
 }

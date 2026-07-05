@@ -1,12 +1,27 @@
 {
   "id": "com.google.Chrome",
   "name": "Google Chrome",
-  "recipePrompt": "这个规则用于识别 Google Chrome。Chrome 的稳定版本查询应使用 OmahaProxy/Chrome Version History 等专用接口并区分 macOS channel/architecture；当前规则引擎未内置该专用策略，先不自动抽取版本。",
+  "recipePrompt": "这个规则用于识别 Google Chrome。版本来自 Google 官方 Chrome for Testing last-known-good-versions JSON，只取 channels.Stable.version。下载包使用 Google 官方 universal stable dmg 固定地址。",
   "match": {
     "bundleIdentifier": "com.google.Chrome",
     "appName": "Google Chrome",
     "officialHost": "google.com"
   },
-  "checks": [],
-  "updatePageURL": "https://www.google.com/chrome/"
+  "checks": [
+    {
+      "url": "https://googlechromelabs.github.io/chrome-for-testing/last-known-good-versions.json",
+      "extract": {
+        "type": "regex",
+        "pattern": "\"Stable\"\\s*:\\s*\\{[^}]*\"version\"\\s*:\\s*\"([0-9]+(?:\\.[0-9A-Za-z]+){1,5})\"",
+        "versionGroup": 1
+      }
+    }
+  ],
+  "updatePageURL": "https://www.google.com/chrome/",
+  "download": {
+    "url": "https://dl.google.com/chrome/mac/universal/stable/GGRO/googlechrome.dmg",
+    "sourceURL": null,
+    "pattern": null,
+    "urlGroup": null
+  }
 }

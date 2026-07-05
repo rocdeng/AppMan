@@ -17,5 +17,11 @@
       }
     }
   ],
-  "updatePageURL": "https://www.comfy.org/download"
+  "updatePageURL": "https://www.comfy.org/download",
+  "download": {
+    "url": null,
+    "sourceURL": "https://updater.comfy.org/latest-mac.yml",
+    "pattern": "url:\\s*(.+\\.(?:dmg|zip))",
+    "urlGroup": 1
+  }
 }

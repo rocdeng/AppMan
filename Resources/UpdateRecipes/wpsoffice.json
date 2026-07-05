@@ -8,5 +8,6 @@
     "officialHost": "wps.com"
   },
   "checks": [],
-  "updatePageURL": "https://www.wps.com/office/mac/"
+  "updatePageURL": "https://www.wps.com/office/mac/",
+  "download": null
 }
