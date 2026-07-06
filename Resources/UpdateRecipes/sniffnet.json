@@ -1,7 +1,7 @@
 {
   "id": "io.github.gyulyvgc.sniffnet",
   "name": "Sniffnet",
-  "recipePrompt": "这个规则用于检测 Sniffnet。官方版本发布在 GitHub gyulyvgc/sniffnet releases，GitHub API 的 tag_name 形如 v1.5.0。不要从 Linux .deb 文件名里的架构数字抽取版本。",
+  "recipePrompt": "这个规则用于检测 Sniffnet。官方版本发布在 GitHub gyulyvgc/sniffnet releases，GitHub API 的 tag_name 形如 v1.5.0。不要从 Linux .deb 文件名里的架构数字抽取版本。Apple Silicon 机器应选择 macOS_AppleSilicon dmg，不要选 macOS_Intel。",
   "match": {
     "bundleIdentifier": "io.github.gyulyvgc.sniffnet",
     "appName": "Sniffnet",
@@ -21,7 +21,7 @@
   "download": {
     "url": null,
     "sourceURL": "https://api.github.com/repos/gyulyvgc/sniffnet/releases/latest",
-    "pattern": "\"browser_download_url\"\\s*:\\s*\"([^\"]*(?:macos|darwin|apple)[^\"]*\\.(?:dmg|zip))\"",
+    "pattern": "(?i)\"browser_download_url\"\\s*:\\s*\"([^\"]*macos[_-]?applesilicon[^\"]*\\.(?:dmg|zip))\"",
     "urlGroup": 1
   }
 }

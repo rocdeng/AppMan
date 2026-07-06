@@ -246,14 +246,20 @@ struct UpdateRecipeRunner: Sendable {
             latestVersion.replacingOccurrences(of: ".", with: ""),
         ].map { $0.lowercased() })
 
-        if let matched = candidates.first(where: { candidate in
+        func score(_ candidate: URL) -> Int {
             let path = candidate.lastPathComponent.lowercased()
-            return versionForms.contains { path.contains($0) }
-        }) {
-            return matched
+            var score = 0
+            if versionForms.contains(where: { path.contains($0) }) {
+                score += 20
+            }
+            score += PackageTargetArchitecture.current.score(packageName: path)
+            if candidate.pathExtension.lowercased() == "dmg" {
+                score += 2
+            }
+            return score
         }
 
-        return candidates.first
+        return candidates.max { score($0) < score($1) }
     }
 
     private func extractVersions(from text: String, using extract: UpdateRecipe.Extract) -> [String] {

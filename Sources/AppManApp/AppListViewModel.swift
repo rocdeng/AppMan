@@ -7,6 +7,89 @@ struct DownloadProgress: Equatable, Sendable {
     let totalBytes: Int64?
 }
 
+struct AppInfoDetails: Equatable {
+    let currentVersion: String
+    let latestVersion: String
+    let websiteTitle: String
+    let websiteURL: URL?
+    let latestVersionLinkTitle: String
+    let latestVersionURL: URL?
+
+    init(app: AppRecord) {
+        currentVersion = app.currentVersionDisplayText
+        latestVersion = app.latestVersionDisplayText
+
+        let updateURL = Self.updateURL(for: app)
+        let websiteLink = updateURL.flatMap(Self.websiteLink(for:))
+        websiteURL = websiteLink?.url
+        websiteTitle = websiteLink?.title ?? "暂无"
+        latestVersionURL = updateURL
+        latestVersionLinkTitle = Self.latestVersionLinkTitle(for: app, hasURL: updateURL != nil)
+    }
+
+    private static func updateURL(for app: AppRecord) -> URL? {
+        switch app.updateStatus {
+        case let .needsOfficialWebsiteConfirmation(candidateURL):
+            return candidateURL
+        default:
+            return app.updateURL
+        }
+    }
+
+    private static func websiteLink(for url: URL) -> WebsiteLink? {
+        guard let scheme = url.scheme,
+              let host = url.host(percentEncoded: false) else {
+            return nil
+        }
+
+        let pathComponents = url.pathComponents.filter { $0 != "/" }
+        if host == "github.com", pathComponents.count >= 2 {
+            let projectPath = "\(pathComponents[0])/\(pathComponents[1])"
+            guard let projectURL = URL(string: "\(scheme)://\(host)/\(projectPath)") else {
+                return nil
+            }
+            return WebsiteLink(title: "\(host)/\(projectPath)", url: projectURL)
+        }
+
+        guard let rootURL = URL(string: "\(scheme)://\(host)") else {
+            return nil
+        }
+        return WebsiteLink(title: host, url: rootURL)
+    }
+
+    private static func latestVersionLinkTitle(for app: AppRecord, hasURL: Bool) -> String {
+        guard hasURL else {
+            return "暂无"
+        }
+
+        switch app.updateStatus {
+        case .needsOfficialWebsiteConfirmation:
+            return "候选官网"
+        case .needsManualUpdateURL:
+            return "需手动输入"
+        default:
+            return app.updateURLIsDirectDownload ? "下载链接" : "打开链接"
+        }
+    }
+}
+
+private struct WebsiteLink: Equatable {
+    let title: String
+    let url: URL
+}
+
+private final class CheckUpdateProgress: @unchecked Sendable {
+    private let lock = NSLock()
+    private var completed = 0
+
+    func completeOne() -> Int {
+        lock.lock()
+        defer { lock.unlock() }
+        completed += 1
+        return completed
+    }
+}
+
 @MainActor
 final class AppListViewModel: ObservableObject {
     @Published private(set) var apps: [AppRecord] = []
@@ -38,6 +121,7 @@ final class AppListViewModel: ObservableObject {
     private let downloadsDirectory: URL?
     private let downloadData: @Sendable (URL, @escaping @MainActor (DownloadProgress) async -> Void) async throws -> Data
     private let revealDownloadedPackage: @MainActor (URL) -> Void
+    private let openDownloadedPackage: @MainActor (URL) -> Void
     private var currentUpdateTask: Task<Bool, Never>?
 
     init(
@@ -58,6 +142,9 @@ final class AppListViewModel: ObservableObject {
         ) async throws -> Data = defaultDownloadData,
         revealDownloadedPackage: @escaping @MainActor (URL) -> Void = { url in
             NSWorkspace.shared.activateFileViewerSelecting([url])
+        },
+        openDownloadedPackage: @escaping @MainActor (URL) -> Void = { url in
+            NSWorkspace.shared.open(url)
         }
     ) {
         self.scanner = scanner
@@ -73,6 +160,7 @@ final class AppListViewModel: ObservableObject {
         self.downloadsDirectory = downloadsDirectory
         self.downloadData = downloadData
         self.revealDownloadedPackage = revealDownloadedPackage
+        self.openDownloadedPackage = openDownloadedPackage
         ignoredApps = (try? ignoreListStore.load()) ?? []
         let preferences = (try? preferencesStore.load()) ?? AppPreferences()
         automaticallyChecksUpdatesOnLaunch = preferences.automaticallyChecksUpdatesOnLaunch
@@ -127,6 +215,7 @@ final class AppListViewModel: ObservableObject {
 
         isCheckingUpdates = true
         errorMessage = nil
+        updateProgressText = nil
 
         do {
             let updateChecker = makeUpdateChecker()
@@ -141,8 +230,29 @@ final class AppListViewModel: ObservableObject {
                 let checkableApps = refreshedApps.filter { app in
                     !ignoredAppPaths.contains(app.path) && (appPaths == nil || appPaths?.contains(app.path) == true)
                 }
-                let checkedApps = try updateChecker.checkUpdates(for: checkableApps)
-                var checkedAppIndex = checkedApps.startIndex
+                let totalCount = checkableApps.count
+                if totalCount > 0 {
+                    await MainActor.run {
+                        self.updateProgressText = Self.checkUpdateProgressText(completed: 0, total: totalCount)
+                    }
+                }
+
+                let progress = CheckUpdateProgress()
+                let checkedApps = try updateChecker.checkUpdates(for: checkableApps) { _ in
+                    let completed = progress.completeOne()
+                    Task { @MainActor in
+                        self.updateProgressText = Self.checkUpdateProgressText(
+                            completed: completed,
+                            total: totalCount
+                        )
+                    }
+                }
+
+                var checkedAppsByPath: [URL: AppRecord] = [:]
+                for checkedApp in checkedApps {
+                    checkedAppsByPath[checkedApp.path] = checkedApp
+                }
+
                 let updatedApps = refreshedApps.map { app in
                     if ignoredAppPaths.contains(app.path) {
                         var ignoredApp = app
@@ -154,13 +264,7 @@ final class AppListViewModel: ObservableObject {
                         return app
                     }
 
-                    guard checkedAppIndex < checkedApps.endIndex else {
-                        return app
-                    }
-
-                    let checkedApp = checkedApps[checkedAppIndex]
-                    checkedAppIndex = checkedApps.index(after: checkedAppIndex)
-                    return checkedApp
+                    return checkedAppsByPath[app.path] ?? app
                 }
                 try appCache.save(updatedApps)
                 return updatedApps
@@ -171,6 +275,7 @@ final class AppListViewModel: ObservableObject {
             errorMessage = error.localizedDescription
         }
 
+        updateProgressText = nil
         isCheckingUpdates = false
     }
 
@@ -350,6 +455,12 @@ final class AppListViewModel: ObservableObject {
         statusMessage = nil
     }
 
+    #if DEBUG
+    func replaceAppsForTesting(_ apps: [AppRecord]) {
+        self.apps = apps
+    }
+    #endif
+
     @discardableResult
     private func updateApp(
         _ app: AppRecord,
@@ -394,6 +505,19 @@ final class AppListViewModel: ObservableObject {
             let downloadsURL = try await Task.detached(priority: .userInitiated) {
                 try Self.appManDownloadsDirectory(fileManager: fileManager, downloadsDirectory: downloadsDirectory)
             }.value
+            let existingPackageURL = Self.existingDestinationURL(
+                for: url,
+                in: downloadsURL,
+                fileManager: fileManager
+            )
+            if let existingPackageURL {
+                updateProgressText = "正在打开下载位置..."
+                revealDownloadedPackage(existingPackageURL)
+                didDownload = true
+                updateProgressText = nil
+                isUpdatingApp = false
+                return didDownload
+            }
 
             updateProgressText = "正在下载安装包..."
             let data = try await downloadData(url) { [weak self] progress in
@@ -411,8 +535,8 @@ final class AppListViewModel: ObservableObject {
                 return destinationURL
             }.value
 
-            updateProgressText = "正在打开下载位置..."
-            revealDownloadedPackage(destinationURL)
+            updateProgressText = "正在打开安装包..."
+            openDownloadedPackage(destinationURL)
             didDownload = true
         } catch where Self.isCancellation(error) {
             statusMessage = "已取消下载"
@@ -512,6 +636,10 @@ final class AppListViewModel: ObservableObject {
         return "正在下载安装包...\n总大小 \(formatByteCount(totalBytes))，已下载 \(formatByteCount(progress.bytesReceived)) (\(percentage)%)"
     }
 
+    nonisolated static func checkUpdateProgressText(completed: Int, total: Int) -> String {
+        "正在检查更新... (\(completed)/\(total))"
+    }
+
     nonisolated private static func formatByteCount(_ bytes: Int64) -> String {
         ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file)
     }
@@ -521,8 +649,8 @@ final class AppListViewModel: ObservableObject {
         in directoryURL: URL,
         fileManager: FileManager
     ) -> URL {
-        let filename = sourceURL.lastPathComponent.isEmpty ? "AppManDownload" : sourceURL.lastPathComponent
-        let baseURL = directoryURL.appendingPathComponent(filename)
+        let filename = destinationFilename(for: sourceURL)
+        let baseURL = destinationURL(for: sourceURL, in: directoryURL)
         guard fileManager.fileExists(atPath: baseURL.path) else {
             return baseURL
         }
@@ -543,6 +671,24 @@ final class AppListViewModel: ObservableObject {
         }
 
         return directoryURL.appendingPathComponent("\(UUID().uuidString)-\(filename)")
+    }
+
+    nonisolated private static func existingDestinationURL(
+        for sourceURL: URL,
+        in directoryURL: URL,
+        fileManager: FileManager
+    ) -> URL? {
+        let destinationURL = destinationURL(for: sourceURL, in: directoryURL)
+        return fileManager.fileExists(atPath: destinationURL.path) ? destinationURL : nil
+    }
+
+    nonisolated private static func destinationURL(for sourceURL: URL, in directoryURL: URL) -> URL {
+        let filename = destinationFilename(for: sourceURL)
+        return directoryURL.appendingPathComponent(filename)
+    }
+
+    nonisolated private static func destinationFilename(for sourceURL: URL) -> String {
+        sourceURL.lastPathComponent.isEmpty ? "AppManDownload" : sourceURL.lastPathComponent
     }
 }
 

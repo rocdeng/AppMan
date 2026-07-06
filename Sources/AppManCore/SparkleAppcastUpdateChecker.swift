@@ -10,7 +10,14 @@ public struct SparkleAppcastUpdateChecker: AppUpdateChecking {
     }
 
     public func checkUpdates(for apps: [AppRecord]) throws -> [AppRecord] {
-        try LimitedConcurrentMap.map(apps, limit: 3) { app in
+        try checkUpdates(for: apps, onProgress: { _ in })
+    }
+
+    public func checkUpdates(
+        for apps: [AppRecord],
+        onProgress: @escaping @Sendable (AppRecord) -> Void
+    ) throws -> [AppRecord] {
+        try LimitedConcurrentMap.map(apps, limit: 3, onResult: onProgress) { app in
             guard case let .sparkle(feedURL) = app.installSource else {
                 var updatedApp = app
                 updatedApp.updateStatus = .unsupported(reason: "暂不支持此安装渠道")

@@ -197,7 +197,7 @@ struct AppListView: View {
             return "正在扫描..."
         }
         if viewModel.isCheckingUpdates {
-            return "正在检查更新..."
+            return viewModel.updateProgressText ?? "正在检查更新..."
         }
         if viewModel.isUpdatingApp {
             return viewModel.updateProgressText ?? "正在更新..."
@@ -297,9 +297,18 @@ private struct ProgressOverlay: View {
     var body: some View {
         ZStack {
             Color.black.opacity(0.08)
-            ProgressView(text)
-                .padding(20)
-                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8))
+            VStack(spacing: 12) {
+                ProgressView()
+                Text(text)
+                    .font(.system(size: 13))
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .monospacedDigit()
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .frame(minWidth: 300)
+            .padding(20)
+            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8))
         }
         .background(EscapeKeyCatcher(action: cancel).frame(width: 0, height: 0))
     }
@@ -444,6 +453,9 @@ private struct AppChromeView: View {
 private struct AppInfoDialog: View {
     let app: AppRecord
     @Environment(\.dismiss) private var dismiss
+    private var details: AppInfoDetails {
+        AppInfoDetails(app: app)
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
@@ -463,8 +475,10 @@ private struct AppInfoDialog: View {
 
             Grid(alignment: .leading, horizontalSpacing: 14, verticalSpacing: 9) {
                 AppInfoRow(title: "来源", value: app.installSource.shortDisplayName)
-                AppInfoRow(title: "当前版本", value: app.currentVersionDisplayText)
-                AppInfoRow(title: "最新版本", value: app.latestVersionDisplayText)
+                AppInfoRow(title: "当前版本", value: details.currentVersion)
+                AppInfoRow(title: "最新版本", value: details.latestVersion)
+                AppInfoLinkRow(title: "App 网站", label: details.websiteTitle, url: details.websiteURL)
+                AppInfoLinkRow(title: "最新版链接", label: details.latestVersionLinkTitle, url: details.latestVersionURL)
                 AppInfoRow(title: "大小", value: ByteCountFormatter.string(fromByteCount: app.sizeBytes, countStyle: .file))
                 AppInfoRow(title: "路径", value: app.path.path)
             }
@@ -493,6 +507,38 @@ private struct AppInfoRow: View {
             Text(value)
                 .textSelection(.enabled)
                 .lineLimit(2)
+        }
+        .font(.system(size: 13))
+    }
+}
+
+private struct AppInfoLinkRow: View {
+    let title: String
+    let label: String
+    let url: URL?
+    @Environment(\.openURL) private var openURL
+
+    var body: some View {
+        GridRow {
+            Text(title)
+                .foregroundStyle(.secondary)
+
+            if let url {
+                Button {
+                    openURL(url)
+                } label: {
+                    Text(label)
+                        .lineLimit(1)
+                }
+                .buttonStyle(.link)
+                .help(url.absoluteString)
+                .textSelection(.enabled)
+            } else {
+                Text(label)
+                    .foregroundStyle(.secondary)
+                    .textSelection(.enabled)
+                    .lineLimit(1)
+            }
         }
         .font(.system(size: 13))
     }
@@ -563,7 +609,7 @@ private struct SelfUpdateURLDialog: View {
         case .needsOfficialWebsiteConfirmation:
             return "确认官网 / 检查更新网址"
         default:
-            return "手动输入检查更新网址"
+            return "需手动输入检查更新网址"
         }
     }
 
@@ -2331,7 +2377,7 @@ private struct AppCatalogHeader: View {
     }
 }
 
-private extension AppRecord {
+extension AppRecord {
     var currentVersionDisplayText: String {
         let shortVersion = normalized(shortVersion)
         let buildVersion = normalized(buildVersion)
@@ -2361,7 +2407,7 @@ private extension AppRecord {
         case .needsOfficialWebsiteConfirmation:
             return "待确认"
         case .needsManualUpdateURL:
-            return "手动输入"
+            return "需手动输入"
         case .undetectable:
             return "无法检测"
         case .unsupported:

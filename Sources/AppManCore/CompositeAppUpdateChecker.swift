@@ -19,12 +19,43 @@ public struct CompositeAppUpdateChecker: AppUpdateChecking {
     }
 
     public func checkUpdates(for apps: [AppRecord]) throws -> [AppRecord] {
+        try checkUpdates(for: apps, onProgress: { _ in })
+    }
+
+    public func checkUpdates(
+        for apps: [AppRecord],
+        onProgress: @escaping @Sendable (AppRecord) -> Void
+    ) throws -> [AppRecord] {
         var updatedApps = apps
 
-        try updateApps(of: .homebrewCask, in: apps, checker: homebrewChecker, updatedApps: &updatedApps)
-        try updateApps(of: .macAppStore, in: apps, checker: macAppStoreChecker, updatedApps: &updatedApps)
-        try updateApps(of: .sparkle, in: apps, checker: sparkleChecker, updatedApps: &updatedApps)
-        try updateApps(of: .manual, in: apps, checker: selfHostedChecker, updatedApps: &updatedApps)
+        try updateApps(
+            of: .homebrewCask,
+            in: apps,
+            checker: homebrewChecker,
+            updatedApps: &updatedApps,
+            onProgress: onProgress
+        )
+        try updateApps(
+            of: .macAppStore,
+            in: apps,
+            checker: macAppStoreChecker,
+            updatedApps: &updatedApps,
+            onProgress: onProgress
+        )
+        try updateApps(
+            of: .sparkle,
+            in: apps,
+            checker: sparkleChecker,
+            updatedApps: &updatedApps,
+            onProgress: onProgress
+        )
+        try updateApps(
+            of: .manual,
+            in: apps,
+            checker: selfHostedChecker,
+            updatedApps: &updatedApps,
+            onProgress: onProgress
+        )
 
         return updatedApps
     }
@@ -33,12 +64,13 @@ public struct CompositeAppUpdateChecker: AppUpdateChecking {
         of sourceKind: InstallSourceKind,
         in apps: [AppRecord],
         checker: any AppUpdateChecking,
-        updatedApps: inout [AppRecord]
+        updatedApps: inout [AppRecord],
+        onProgress: @escaping @Sendable (AppRecord) -> Void
     ) throws {
         let indexedApps = apps.enumerated().filter { _, app in
             app.updateStatus != .ignored && matches(sourceKind, app.installSource)
         }
-        let checkedApps = try checker.checkUpdates(for: indexedApps.map(\.element))
+        let checkedApps = try checker.checkUpdates(for: indexedApps.map(\.element), onProgress: onProgress)
 
         for (offset, checkedApp) in checkedApps.enumerated() where indexedApps.indices.contains(offset) {
             updatedApps[indexedApps[offset].offset] = checkedApp

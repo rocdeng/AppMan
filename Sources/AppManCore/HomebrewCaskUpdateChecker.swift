@@ -2,6 +2,21 @@ import Foundation
 
 public protocol AppUpdateChecking: Sendable {
     func checkUpdates(for apps: [AppRecord]) throws -> [AppRecord]
+    func checkUpdates(
+        for apps: [AppRecord],
+        onProgress: @escaping @Sendable (AppRecord) -> Void
+    ) throws -> [AppRecord]
+}
+
+public extension AppUpdateChecking {
+    func checkUpdates(
+        for apps: [AppRecord],
+        onProgress: @escaping @Sendable (AppRecord) -> Void
+    ) throws -> [AppRecord] {
+        let checkedApps = try checkUpdates(for: apps)
+        checkedApps.forEach(onProgress)
+        return checkedApps
+    }
 }
 
 public struct HomebrewCaskUpdateChecker: AppUpdateChecking {
@@ -12,6 +27,13 @@ public struct HomebrewCaskUpdateChecker: AppUpdateChecking {
     }
 
     public func checkUpdates(for apps: [AppRecord]) throws -> [AppRecord] {
+        try checkUpdates(for: apps, onProgress: { _ in })
+    }
+
+    public func checkUpdates(
+        for apps: [AppRecord],
+        onProgress: @escaping @Sendable (AppRecord) -> Void
+    ) throws -> [AppRecord] {
         let homebrewApps = apps.filter { app in
             if case .homebrewCask = app.installSource {
                 return true
@@ -37,7 +59,7 @@ public struct HomebrewCaskUpdateChecker: AppUpdateChecking {
             }
         }
 
-        return apps.map { app in
+        let updatedApps = apps.map { app in
             var updatedApp = app
 
             guard case let .homebrewCask(token) = app.installSource else {
@@ -64,6 +86,9 @@ public struct HomebrewCaskUpdateChecker: AppUpdateChecking {
 
             return updatedApp
         }
+
+        updatedApps.forEach(onProgress)
+        return updatedApps
     }
 
     private static func caskPageURL(for token: String) -> URL? {

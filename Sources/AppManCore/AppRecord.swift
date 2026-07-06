@@ -108,7 +108,7 @@ public enum AppUpdateStatus: Equatable, Sendable, Codable {
         case .needsOfficialWebsiteConfirmation:
             return "待确认"
         case .needsManualUpdateURL:
-            return "手动输入"
+            return "需手动输入"
         case .undetectable:
             return "无法检测"
         case .unsupported:

@@ -1,7 +1,7 @@
 {
   "id": "now.typeless.desktop",
   "name": "Typeless",
-  "recipePrompt": "这个规则用于检测 Typeless desktop。Electron updater 配置指向 typeless-static.com/desktop-release，arm64.yml 中 version 字段是当前 arm64 渠道版本。",
+  "recipePrompt": "这个规则用于检测 Typeless desktop。macOS Apple Silicon 的 Electron updater feed 是 typeless-static.com/desktop-release/arm64-mac.yml，version 字段是当前版本，files.url 中的 arm64 dmg 是安装包。",
   "match": {
     "bundleIdentifier": "now.typeless.desktop",
     "appName": "Typeless",
@@ -9,7 +9,7 @@
   },
   "checks": [
     {
-      "url": "https://typeless-static.com/desktop-release/arm64.yml",
+      "url": "https://typeless-static.com/desktop-release/arm64-mac.yml",
       "extract": {
         "type": "regex",
         "pattern": "(?m)^version:\\s*([0-9]+(?:\\.[0-9A-Za-z]+){1,5})\\s*$",
@@ -18,5 +18,10 @@
     }
   ],
   "updatePageURL": "https://www.typeless.com/",
-  "download": null
+  "download": {
+    "url": null,
+    "sourceURL": "https://typeless-static.com/desktop-release/arm64-mac.yml",
+    "pattern": "(?m)^\\s*-\\s+url:\\s*(Typeless-[^\\n]+-arm64\\.dmg)\\s*$",
+    "urlGroup": 1
+  }
 }

@@ -132,7 +132,7 @@ AppMan 第一版扫描以下目录：
 | 生成候选 | 根据 App 名、Bundle ID 搜索官网；默认使用 Google，用户在设置中配置 TinyFish API Key 后优先使用 TinyFish |
 | 展示入口 | 最新版本列显示蓝色“待确认”，点击后弹出确认官网 / 检查更新网址窗口，预填搜索到的候选地址 |
 | 用户确认 | 用户确认这是官网或更新检查页后才写入本地记录 |
-| 手动兜底 | 如果没有搜索到候选，最新版本列显示蓝色“手动输入”，点击后输入检查更新网址 |
+| 手动兜底 | 如果没有搜索到候选，最新版本列显示蓝色“需手动输入”，点击后输入检查更新网址 |
 | 后续检查 | 已保存网址后直接检查；如果命中内置或用户 recipe，则按 recipe 检查 |
 | 异常降级 | 域名变化、签名不匹配、下载来源变化时要求重新确认 |
 
@@ -146,7 +146,7 @@ AppMan 第一版扫描以下目录：
 | `update_url` | 用户确认或手动输入的官网 / 下载页 / 更新检查页 |
 | `confirmed_at` | 确认时间 |
 
-如果没有确认网址、没有手动网址、也没有可匹配 recipe，检查结果显示“待确认”或“手动输入”，不能频繁弹窗打断用户。只有用户已确认 / 手动输入的网址无法解析版本时，才显示“无法检测”。
+如果没有确认网址、没有手动网址、也没有可匹配 recipe，检查结果显示“待确认”或“需手动输入”，不能频繁弹窗打断用户。只有用户已确认 / 手动输入的网址无法解析版本时，才显示“无法检测”。
 
 ## 手动安装 App 更新规则
 
@@ -178,7 +178,21 @@ AppMan 第一版扫描以下目录：
 
 已补充专用公开规则的 App 包括 Android Studio、Google Chrome、Microsoft Edge、QQ、Tencent Lemon、WeChat 和 Warp。其中 Warp 当前只能检测 GitHub release 版本，未发现稳定安装包直链，点击更新时走官网兜底。
 
-如果内置 recipe 仅用于记录“已研究但暂无稳定检测方式”，其 `checks` 可以为空；这类 App 检查后显示“手动输入”，点击后会预填 `updatePageURL` 作为用户确认 / 修改的兜底网址。
+如果内置 recipe 仅用于记录“已研究但暂无稳定检测方式”，其 `checks` 可以为空；这类 App 检查后显示“需手动输入”，点击后会预填 `updatePageURL` 作为用户确认 / 修改的兜底网址。
+
+## 手动安装 App Detector
+
+当 `SELF` App 没有命中 recipe，但用户已经确认或手动输入了更新网址时，App 使用 detector 链尝试识别最新版本和安装包链接。Detector 是可扩展的小模块，按顺序尝试，命中后短路，便于后续加入更多官网策略。
+
+| Detector | 触发条件 | 行为 |
+|---|---|---|
+| GitHub Release Detector | 确认网址是 `github.com/<owner>/<repo>` 或 release/download 链接 | 调用 GitHub latest release API，读取 tag 作为最新版本，并优先选择 macOS `.dmg/.pkg/.zip` asset |
+| Sparkle Feed Detector | 确认网址是 appcast XML 或网页实际返回 Sparkle/RSS appcast | 解析 `sparkle:shortVersionString` / `sparkle:version`，并读取 enclosure 安装包 URL |
+| JSON API Detector | 确认网址返回 JSON API | 从常见 `version` / `latestVersion` 字段提取版本，并从 `downloadUrl` 等字段提取安装包 URL |
+| Redirect Download Detector | 确认网址是固定“latest download”链接 | 解析最终跳转到的 `.dmg/.pkg/.zip` URL，并从文件名提取版本 |
+| Generic Web Page Detector | 其他普通网页 | 抓取 HTML，用通用规则提取版本号，并从页面里寻找 `.dmg/.pkg/.zip` 安装包链接 |
+
+默认执行顺序是 GitHub、Sparkle、JSON API、重定向下载、通用网页。Detector 只处理“用户已确认网址”的情况，不自动信任搜索结果。搜索得到的候选仍需用户点击“待确认”后才进入 detector 流程。
 
 ## 更新检查和执行
 
@@ -187,7 +201,7 @@ AppMan 第一版扫描以下目录：
 | Homebrew Cask | `brew outdated --cask` | `brew upgrade --cask <token>` |
 | Mac App Store | Apple lookup API，优先 Bundle ID，必要时 Adam ID | 打开 `macappstore://` 对应 App 页面 |
 | Sparkle | 读取 appcast feed，取最高版本 | 打开更新地址，不强行替代 App 内更新器 |
-| 手动安装 | recipe、已确认网址、Google/TinyFish 候选、手动输入网址；检测最新版本时同时尝试解析 `.dmg`、`.pkg`、`.zip` 安装包链接 | 点击最新版本号时直接下载最新安装包到 `~/Downloads/AppMan/`；只下载，不自动安装 |
+| 手动安装 | recipe、已确认网址、Google/TinyFish 候选、手动输入网址；检测最新版本时同时尝试解析 `.dmg`、`.pkg`、`.zip` 安装包链接 | 点击最新版本号时直接下载最新安装包到 `~/Downloads/AppMan/`；下载完成后自动打开安装包，由 macOS 处理 dmg 挂载、压缩包解压或 pkg 安装器打开 |
 
 检查更新并发限制为 3，避免一次性对大量手动 App 发起过多网络请求。
 
@@ -205,7 +219,7 @@ AppMan 第一版扫描以下目录：
 
 | 场景 | 行为 |
 |---|---|
-| recipe 或已确认网页能解析出安装包链接 | 检查结果会把更新地址标记为“安装包直链”；最新版本号可点击，点击后下载到 `~/Downloads/AppMan/` 并在 Finder 中定位 |
+| recipe 或已确认网页能解析出安装包链接 | 检查结果会把更新地址标记为“安装包直链”；最新版本号可点击，点击后下载到 `~/Downloads/AppMan/` 并自动打开；如果同名安装包已存在，则直接在 Finder 中定位已有文件 |
 | 只有版本号，没有安装包链接 | 直接打开官网 / 更新页 |
 | 下载目标文件已存在 | 自动追加序号，避免覆盖已有文件 |
 | 安装包类型 | 第一版只支持 `.dmg`、`.pkg`、`.zip` |
@@ -233,7 +247,7 @@ AppMan 第一版扫描以下目录：
 | 搜索 | 工具栏右侧搜索框过滤 App；当前放得下时直接展开，后续空间不足时可收起 |
 | App 信息对话框 | 点击 info 后显示选中 App 的基本信息 |
 | 卸载清理窗口 | 展示 App 本体及关联文件候选，执行时移动到废纸篓 |
-| 官网确认面板 | 点击“待确认”或“手动输入”后输入 / 确认检查更新网址 |
+| 官网确认面板 | 点击“待确认”或“需手动输入”后输入 / 确认检查更新网址 |
 | 设置页 | 启动自动检查更新、TinyFish API Key、忽略更新检查列表 |
 | 隔离区视图 | 后续展示已隔离项目、原路径、恢复、清空 |
 
@@ -261,7 +275,7 @@ AppMan 第一版扫描以下目录：
 | App 正在运行 | 提示退出后重试 |
 | 权限不足 | 触发系统授权或提示手动处理 |
 | 官网候选待确认 | 最新版本列显示“待确认”，等待用户点击确认 |
-| 官网候选为空，或内置 recipe 暂无稳定检查规则 | 最新版本列显示“手动输入”，等待用户提供网址；如果已有 `updatePageURL`，弹窗预填该网址 |
+| 官网候选为空，或内置 recipe 暂无稳定检查规则 | 最新版本列显示“需手动输入”，等待用户提供网址；如果已有 `updatePageURL`，弹窗预填该网址 |
 | 已确认网页无法解析版本 | 显示“无法检测” |
 | 下载包签名不匹配 | 阻止自动更新，展示差异 |
 | 残留恢复失败 | 保留隔离区记录，提示具体失败路径 |

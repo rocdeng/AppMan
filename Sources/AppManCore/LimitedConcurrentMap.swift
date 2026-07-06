@@ -6,8 +6,21 @@ enum LimitedConcurrentMap {
         limit: Int,
         transform: @escaping @Sendable (T) throws -> U
     ) throws -> [U] {
+        try map(values, limit: limit, onResult: { _ in }, transform: transform)
+    }
+
+    static func map<T, U>(
+        _ values: [T],
+        limit: Int,
+        onResult: @escaping @Sendable (U) -> Void,
+        transform: @escaping @Sendable (T) throws -> U
+    ) throws -> [U] {
         guard values.count > 1, limit > 1 else {
-            return try values.map(transform)
+            return try values.map { value in
+                let result = try transform(value)
+                onResult(result)
+                return result
+            }
         }
 
         let workerCount = min(limit, values.count)
@@ -37,6 +50,7 @@ enum LimitedConcurrentMap {
                     lock.lock()
                     results[index] = result
                     lock.unlock()
+                    onResult(result)
                 } catch {
                     lock.lock()
                     if firstError == nil {

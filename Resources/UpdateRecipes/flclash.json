@@ -1,7 +1,7 @@
 {
   "id": "com.follow.clash",
   "name": "FlClash",
-  "recipePrompt": "这个规则用于检测 FlClash。官方发布在 GitHub chen08209/FlClash releases，GitHub API 的 tag_name 是版本号。",
+  "recipePrompt": "这个规则用于检测 FlClash。官方发布在 GitHub chen08209/FlClash releases，GitHub API 的 tag_name 是版本号。Apple Silicon 机器必须优先下载 macos-arm64 dmg，不要选 macos-amd64。",
   "match": {
     "bundleIdentifier": "com.follow.clash",
     "appName": "FlClash",
@@ -21,7 +21,7 @@
   "download": {
     "url": null,
     "sourceURL": "https://api.github.com/repos/chen08209/FlClash/releases/latest",
-    "pattern": "\"browser_download_url\"\\s*:\\s*\"([^\"]*(?:macos|darwin|arm64)[^\"]*\\.(?:dmg|zip))\"",
+    "pattern": "\"browser_download_url\"\\s*:\\s*\"([^\"]*(?:macos|darwin)[-_]?arm64[^\"]*\\.(?:dmg|zip))\"",
     "urlGroup": 1
   }
 }
