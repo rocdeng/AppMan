@@ -1,0 +1,13 @@
+{
+  "id": "com.dengpeng.AppMan",
+  "name": "AppMan",
+  "recipePrompt": "这是本机开发中的 AppMan。当前尚未发布公开版本和安装包，因此只固定 Bundle ID 身份，不自动搜索第三方同名应用。发布后应改为项目正式发布源。",
+  "match": {
+    "bundleIdentifier": "com.dengpeng.AppMan",
+    "appName": "AppMan",
+    "officialHost": null
+  },
+  "checks": [],
+  "updatePageURL": null,
+  "download": null
+}

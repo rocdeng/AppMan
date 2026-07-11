@@ -49,6 +49,7 @@ final class UpdateRecipeCoverageTests: XCTestCase {
         ).load()
         let recipesByID = Dictionary(uniqueKeysWithValues: recipes.map { ($0.id, $0) })
         let expectedCheckedRecipeIDs = [
+            "com.openai.codex",
             "com.google.android.studio",
             "com.google.Chrome",
             "com.microsoft.edgemac",
@@ -56,6 +57,10 @@ final class UpdateRecipeCoverageTests: XCTestCase {
             "com.tencent.Lemon",
             "com.tencent.xinWeChat",
             "dev.warp.Warp-Stable",
+            "com.todesktop.241012ess7yxs0e",
+            "com.xingyuzhong.deepseekgui",
+            "download.mkvtoolnix.MKVToolNix",
+            "org.torproject.torbrowser",
         ]
 
         let missingChecks = expectedCheckedRecipeIDs.filter { id in

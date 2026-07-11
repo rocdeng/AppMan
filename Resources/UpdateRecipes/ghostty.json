@@ -1,7 +1,7 @@
 {
   "id": "com.mitchellh.ghostty",
   "name": "Ghostty",
-  "recipePrompt": "这个规则用于检测 Ghostty 官网下载页版本。https://ghostty.org/download 的页面中包含 Version 1.3.1 文本和 release.files.ghostty.org/1.3.1/Ghostty.dmg 下载链接。优先取 Version 文本。",
+  "recipePrompt": "这个规则用于检测 Ghostty 官网下载页。新版页面会在 Version 和版本号之间插入 HTML 注释，因此直接从 release.files.ghostty.org/<version>/Ghostty.dmg 的稳定路径提取版本，并使用同一链接下载通用 macOS DMG。",
   "match": {
     "bundleIdentifier": "com.mitchellh.ghostty",
     "appName": "Ghostty",
@@ -12,7 +12,7 @@
       "url": "https://ghostty.org/download",
       "extract": {
         "type": "regex",
-        "pattern": "Version\\s+([0-9]+(?:\\.[0-9A-Za-z]+){1,5})",
+        "pattern": "release\\.files\\.ghostty\\.org/([0-9]+(?:\\.[0-9A-Za-z]+){1,5})/Ghostty\\.dmg",
         "versionGroup": 1
       }
     }

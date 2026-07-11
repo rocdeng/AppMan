@@ -1,0 +1,13 @@
+{
+  "id": "com.cfca.MacSip.BCM",
+  "name": "BCMMacSecureKeyboard",
+  "recipePrompt": "这是 CFCA/银行安全输入控件。公开网页搜索容易误命中 Broadcom BCM，当前没有可信的统一公开版本源；固定 Bundle ID 后交由用户填写实际银行官方下载页。",
+  "match": {
+    "bundleIdentifier": "com.cfca.MacSip.BCM",
+    "appName": "BCMMacSecureKeyboard",
+    "officialHost": null
+  },
+  "checks": [],
+  "updatePageURL": null,
+  "download": null
+}

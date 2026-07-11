@@ -99,6 +99,7 @@ final class AppListViewModel: ObservableObject {
     @Published private(set) var isUninstalling = false
     @Published private(set) var updateProgressText: String?
     @Published private(set) var statusMessage: String?
+    @Published var uninstallWarningMessage: String?
     @Published private(set) var ignoredApps: [IgnoredAppRecord] = []
     @Published var automaticallyChecksUpdatesOnLaunch = false
     @Published var tinyFishAPIKey = ""
@@ -122,6 +123,7 @@ final class AppListViewModel: ObservableObject {
     private let downloadData: @Sendable (URL, @escaping @MainActor (DownloadProgress) async -> Void) async throws -> Data
     private let revealDownloadedPackage: @MainActor (URL) -> Void
     private let openDownloadedPackage: @MainActor (URL) -> Void
+    private let recycleItems: @MainActor @Sendable ([URL]) async -> [URL]
     private var currentUpdateTask: Task<Bool, Never>?
 
     init(
@@ -145,6 +147,16 @@ final class AppListViewModel: ObservableObject {
         },
         openDownloadedPackage: @escaping @MainActor (URL) -> Void = { url in
             NSWorkspace.shared.open(url)
+        },
+        recycleItems: @escaping @MainActor @Sendable ([URL]) async -> [URL] = { urls in
+            await withCheckedContinuation { continuation in
+                NSWorkspace.shared.recycle(urls) { recycledURLs, _ in
+                    let recycledPaths = Set(recycledURLs.keys.map { $0.standardizedFileURL.path })
+                    continuation.resume(returning: urls.filter {
+                        !recycledPaths.contains($0.standardizedFileURL.path)
+                    })
+                }
+            }
         }
     ) {
         self.scanner = scanner
@@ -161,11 +173,17 @@ final class AppListViewModel: ObservableObject {
         self.downloadData = downloadData
         self.revealDownloadedPackage = revealDownloadedPackage
         self.openDownloadedPackage = openDownloadedPackage
+        self.recycleItems = recycleItems
         ignoredApps = (try? ignoreListStore.load()) ?? []
         let preferences = (try? preferencesStore.load()) ?? AppPreferences()
         automaticallyChecksUpdatesOnLaunch = preferences.automaticallyChecksUpdatesOnLaunch
         tinyFishAPIKey = preferences.tinyFishAPIKey
-        apps = Self.markIgnored((try? appCache.load()) ?? [], ignoredApps: ignoredApps)
+        let loadedCachedApps = (try? appCache.load()) ?? []
+        let cachedApps = Self.pruneExistingApps(loadedCachedApps, fileManager: fileManager)
+        if cachedApps.count != loadedCachedApps.count {
+            try? appCache.save(cachedApps)
+        }
+        apps = Self.markIgnored(cachedApps, ignoredApps: ignoredApps)
     }
 
     func scan() async {
@@ -222,7 +240,7 @@ final class AppListViewModel: ObservableObject {
             let appCache = self.appCache
             let appBundleReader = self.appBundleReader
             let ignoredAppPaths = Set(ignoredApps.map(\.path))
-            let currentApps = apps
+            let currentApps = Self.pruneExistingApps(apps, fileManager: fileManager)
             let updatedApps = try await Task.detached(priority: .userInitiated) {
                 let refreshedApps = currentApps.map { app in
                     (try? appBundleReader.refreshMetadata(for: app)) ?? app
@@ -264,7 +282,13 @@ final class AppListViewModel: ObservableObject {
                         return app
                     }
 
-                    return checkedAppsByPath[app.path] ?? app
+                    guard let checkedApp = checkedAppsByPath[app.path] else {
+                        return app
+                    }
+                    return Self.preservingLastSuccessfulUpdateIfNeeded(
+                        previous: app,
+                        checked: checkedApp
+                    )
                 }
                 try appCache.save(updatedApps)
                 return updatedApps
@@ -382,20 +406,36 @@ final class AppListViewModel: ObservableObject {
 
         isUninstalling = true
         errorMessage = nil
+        uninstallWarningMessage = nil
 
         do {
             let appCache = self.appCache
             let currentApps = apps
             let updatedApps = currentApps.filter { $0.id != app.id }
+            let appPath = app.path.standardizedFileURL.path
+            let appURL = candidates.first { $0.url.standardizedFileURL.path == appPath }?.url ?? app.path
+            let failedAppItems = await recycleItems([appURL])
+            guard failedAppItems.isEmpty else {
+                errorMessage = "“\(app.name)”无法移到废纸篓。"
+                isUninstalling = false
+                return false
+            }
+
+            let relatedURLs = candidates
+                .filter { $0.url.standardizedFileURL.path != appPath }
+                .map(\.url)
+            let failedRelatedItems = await recycleItems(relatedURLs)
             try await Task.detached(priority: .userInitiated) {
-                for candidate in candidates {
-                    var resultingURL: NSURL?
-                    try FileManager.default.trashItem(at: candidate.url, resultingItemURL: &resultingURL)
-                }
                 try appCache.save(updatedApps)
             }.value
 
             apps = updatedApps
+            if !failedRelatedItems.isEmpty {
+                let paths = failedRelatedItems
+                    .map { Self.displayPath($0) }
+                    .joined(separator: "\n")
+                uninstallWarningMessage = "主程序已卸载，但以下关联项未能移到废纸篓：\n\n\(paths)\n\n这些目录可能受到 macOS 隐私保护。请为 AppMan 授予“完全磁盘访问权限”后再清理。"
+            }
             isUninstalling = false
             return true
         } catch {
@@ -453,6 +493,15 @@ final class AppListViewModel: ObservableObject {
 
     func clearStatusMessage() {
         statusMessage = nil
+    }
+
+    nonisolated private static func displayPath(_ url: URL) -> String {
+        let homePath = FileManager.default.homeDirectoryForCurrentUser.path
+        let path = url.path
+        guard path.hasPrefix(homePath) else {
+            return path
+        }
+        return "~" + path.dropFirst(homePath.count)
     }
 
     #if DEBUG
@@ -590,6 +639,29 @@ final class AppListViewModel: ObservableObject {
             var ignoredApp = app
             ignoredApp.updateStatus = .ignored
             return ignoredApp
+        }
+    }
+
+    nonisolated private static func pruneExistingApps(
+        _ apps: [AppRecord],
+        fileManager: FileManager
+    ) -> [AppRecord] {
+        apps.filter { fileManager.fileExists(atPath: $0.path.path) }
+    }
+
+    nonisolated private static func preservingLastSuccessfulUpdateIfNeeded(
+        previous: AppRecord,
+        checked: AppRecord
+    ) -> AppRecord {
+        guard case .checkFailed = checked.updateStatus else {
+            return checked
+        }
+
+        switch previous.updateStatus {
+        case .upToDate, .updateAvailable:
+            return previous
+        default:
+            return checked
         }
     }
 

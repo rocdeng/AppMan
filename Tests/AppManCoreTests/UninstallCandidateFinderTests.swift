@@ -100,6 +100,40 @@ final class UninstallCandidateFinderTests: XCTestCase {
         XCTAssertTrue(candidates.contains { $0.url.standardizedFileURL.path == vendorSupportURL.standardizedFileURL.path })
     }
 
+    func testFindsSandboxScriptsAndGroupContainer() throws {
+        let root = try makeTemporaryDirectory()
+        let appURL = root.appendingPathComponent("Applications/Clash Mi.app", isDirectory: true)
+        let applicationScriptURL = root.appendingPathComponent("Library/Application Scripts/com.nebula.clashmi", isDirectory: true)
+        let containerURL = root.appendingPathComponent("Library/Containers/com.nebula.clashmi", isDirectory: true)
+        let groupContainerURL = root.appendingPathComponent("Library/Group Containers/group.com.nebula.clashmi", isDirectory: true)
+        let unrelatedGroupURL = root.appendingPathComponent("Library/Group Containers/group.com.example.other", isDirectory: true)
+        for url in [appURL, applicationScriptURL, containerURL, groupContainerURL, unrelatedGroupURL] {
+            try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+        }
+
+        let app = AppRecord(
+            id: "clash-mi",
+            name: "Clash Mi",
+            bundleIdentifier: "com.nebula.clashmi",
+            shortVersion: nil,
+            buildVersion: nil,
+            path: appURL,
+            sizeBytes: 0
+        )
+        let finder = UninstallCandidateFinder(
+            libraryDirectory: root.appendingPathComponent("Library", isDirectory: true),
+            downloadsDirectory: root.appendingPathComponent("Downloads", isDirectory: true)
+        )
+
+        let candidates = try finder.findCandidates(for: app)
+
+        XCTAssertEqual(
+            candidates.map { $0.url.standardizedFileURL.path },
+            [appURL, applicationScriptURL, containerURL, groupContainerURL].map { $0.standardizedFileURL.path }
+        )
+        XCTAssertEqual(candidates.map(\.kind), [.application, .applicationScript, .container, .groupContainer])
+    }
+
     private func makeTemporaryDirectory() throws -> URL {
         let url = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)

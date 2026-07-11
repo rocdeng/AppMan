@@ -48,4 +48,11 @@ cat > "$plist_file" <<'PLIST'
 </plist>
 PLIST
 
+signing_identity="$(security find-identity -v -p codesigning | sed -n 's/.*"\(Apple Development:[^"]*\)".*/\1/p' | head -n 1)"
+if [[ -n "$signing_identity" ]]; then
+  codesign --force --deep --sign "$signing_identity" --identifier com.dengpeng.AppMan "$bundle_dir"
+else
+  codesign --force --deep --sign - --identifier com.dengpeng.AppMan "$bundle_dir"
+fi
+
 echo "$bundle_dir"

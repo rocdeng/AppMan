@@ -436,6 +436,95 @@ final class SelfHostedUpdateCheckerTests: XCTestCase {
         XCTAssertEqual(apps.first?.updateURLIsDirectDownload, true)
     }
 
+    func testRecipeDownloadSourceURLTemplateUsesLatestVersion() throws {
+        let recipe = UpdateRecipe(
+            id: "com.example.template",
+            name: "Template",
+            recipePrompt: "Use the detected version in the release directory URL.",
+            match: UpdateRecipe.Match(
+                bundleIdentifier: "com.example.template",
+                appName: "Template",
+                officialHost: "example.com"
+            ),
+            checks: [
+                UpdateRecipe.Check(
+                    url: URL(string: "https://example.com/releases/")!,
+                    extract: UpdateRecipe.Extract(
+                        type: .regex,
+                        pattern: #"href="([0-9]+\.[0-9]+)/""#,
+                        versionGroup: 1
+                    )
+                ),
+            ],
+            updatePageURL: URL(string: "https://example.com/releases/")!,
+            download: UpdateRecipe.Download(
+                url: nil,
+                sourceURL: nil,
+                sourceURLTemplate: "https://example.com/releases/{version}/",
+                pattern: #"href="([^"]+arm64\.dmg)""#,
+                urlGroup: 1
+            )
+        )
+        let checker = SelfHostedUpdateChecker(
+            sourceStore: SelfUpdateSourceStore(storeURL: temporaryURL()),
+            googleSearcher: FailingSelfUpdateSearcher(),
+            recipeStore: StubUpdateRecipeStore(recipes: [recipe]),
+            fetchData: { url in
+                if url.absoluteString == "https://example.com/releases/" {
+                    return Data(#"<a href="99.0/">99.0</a><a href="100.0/">100.0</a>"#.utf8)
+                }
+                XCTAssertEqual(url.absoluteString, "https://example.com/releases/100.0/")
+                return Data(#"<a href="Template-100.0-arm64.dmg">Download</a>"#.utf8)
+            }
+        )
+
+        let apps = try checker.checkUpdates(for: [
+            makeManualApp(bundleIdentifier: "com.example.template", name: "Template", shortVersion: "99.0"),
+        ])
+
+        XCTAssertEqual(apps.first?.updateURL, URL(string: "https://example.com/releases/100.0/Template-100.0-arm64.dmg"))
+        XCTAssertEqual(apps.first?.updateURLIsDirectDownload, true)
+    }
+
+    func testRecipeFetchFailureIsReportedAsCheckFailure() throws {
+        let recipe = UpdateRecipe(
+            id: "com.example.failure",
+            name: "Failure",
+            recipePrompt: nil,
+            match: UpdateRecipe.Match(
+                bundleIdentifier: "com.example.failure",
+                appName: "Failure",
+                officialHost: "example.com"
+            ),
+            checks: [
+                UpdateRecipe.Check(
+                    url: URL(string: "https://example.com/latest")!,
+                    extract: UpdateRecipe.Extract(
+                        type: .regex,
+                        pattern: #"version: ([0-9.]+)"#,
+                        versionGroup: 1
+                    )
+                ),
+            ],
+            updatePageURL: URL(string: "https://example.com/download")!,
+            download: nil
+        )
+        let checker = SelfHostedUpdateChecker(
+            sourceStore: SelfUpdateSourceStore(storeURL: temporaryURL()),
+            googleSearcher: FailingSelfUpdateSearcher(),
+            recipeStore: StubUpdateRecipeStore(recipes: [recipe]),
+            fetchData: { _ in throw URLError(.badServerResponse) }
+        )
+
+        let apps = try checker.checkUpdates(for: [
+            makeManualApp(bundleIdentifier: "com.example.failure", name: "Failure"),
+        ])
+
+        guard case .checkFailed = apps.first?.updateStatus else {
+            return XCTFail("Recipe request failures should be reported as check failures")
+        }
+    }
+
     func testBundledTypelessRecipeDetectsMacArmPackageURL() throws {
         let recipes = try FileUpdateRecipeStore(
             builtInDirectoryURLs: [

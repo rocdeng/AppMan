@@ -1,13 +1,27 @@
 {
   "id": "com.xingyuzhong.deepseekgui",
   "name": "Kun",
-  "recipePrompt": "这个规则用于识别 Kun/DeepSeek GUI。当前未确认稳定官方更新接口，搜索结果容易命中第三方站，先不自动抽取版本。",
+  "recipePrompt": "这个规则用于检测 Kun。应用包内 app-update.yml 指向 kun-agent.com 官方更新源；latest-mac.yml 提供最新版本以及 x64/arm64 的 ZIP 和 DMG，下载时优先 arm64 DMG。",
   "match": {
     "bundleIdentifier": "com.xingyuzhong.deepseekgui",
     "appName": "Kun",
-    "officialHost": "deepseek-gui.com"
+    "officialHost": "kun-agent.com"
   },
-  "checks": [],
-  "updatePageURL": "https://deepseek-gui.com/",
-  "download": null
+  "checks": [
+    {
+      "url": "https://www.kun-agent.com/api/r2/deepseek-gui/channels/stable/latest/latest-mac.yml",
+      "extract": {
+        "type": "regex",
+        "pattern": "(?m)^version:\\s*([0-9]+(?:\\.[0-9A-Za-z]+){1,5})\\s*$",
+        "versionGroup": 1
+      }
+    }
+  ],
+  "updatePageURL": "https://www.kun-agent.com/",
+  "download": {
+    "url": null,
+    "sourceURL": "https://www.kun-agent.com/api/r2/deepseek-gui/channels/stable/latest/latest-mac.yml",
+    "pattern": "url:\\s*(Kun-[^\\r\\n]+\\.(?:dmg|zip))",
+    "urlGroup": 1
+  }
 }

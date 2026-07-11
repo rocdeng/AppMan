@@ -1,13 +1,28 @@
 {
   "id": "download.mkvtoolnix.MKVToolNix",
   "name": "MKVToolNix",
-  "recipePrompt": "这个规则用于识别 MKVToolNix。官网 macOS 页面目前可抓到的页面版本和本机 app 版本体系不一致，当前不自动抽取版本，避免把网页组件版本误认为 app 版本。",
+  "recipePrompt": "这个规则用于检测 MKVToolNix。只解析官方 /macos/releases/ 目录中的版本子目录，避免误取 h5ai 自身版本；安装包从最新版本目录链接中选择，Apple Silicon 优先 arm64 DMG。",
   "match": {
     "bundleIdentifier": "download.mkvtoolnix.MKVToolNix",
     "appName": "MKVToolNix",
     "officialHost": "mkvtoolnix.download"
   },
-  "checks": [],
-  "updatePageURL": "https://mkvtoolnix.download/macos/",
-  "download": null
+  "checks": [
+    {
+      "url": "https://mkvtoolnix.download/macos/releases/",
+      "extract": {
+        "type": "regex",
+        "pattern": "href=\\\"/macos/releases/([0-9]+(?:\\.[0-9]+){1,2})/\\\"",
+        "versionGroup": 1
+      }
+    }
+  ],
+  "updatePageURL": "https://mkvtoolnix.download/macos/releases/",
+  "download": {
+    "url": null,
+    "sourceURL": null,
+    "sourceURLTemplate": "https://mkvtoolnix.download/macos/releases/{version}/",
+    "pattern": "href=\\\"(/macos/releases/[0-9.]+/MKVToolNix-[^\\\"]+\\.dmg)\\\"",
+    "urlGroup": 1
+  }
 }

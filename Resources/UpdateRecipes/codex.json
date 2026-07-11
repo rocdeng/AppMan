@@ -1,13 +1,27 @@
 {
   "id": "com.openai.codex",
   "name": "Codex",
-  "recipePrompt": "这个规则用于识别 Codex macOS app。官方入口是 developers.openai.com/codex/app，但版本发布和自动更新渠道可能由应用内部管理，当前不自动抽取版本，避免从下载链接架构名误报。",
+  "recipePrompt": "这个规则用于检测 Codex/ChatGPT 桌面应用。应用包内明确包含官方生产 Sparkle feed https://persistent.oaistatic.com/codex-app-prod/appcast.xml；取最新 item 的 sparkle:shortVersionString，并优先选择 arm64 完整 ZIP，不选择 delta。",
   "match": {
     "bundleIdentifier": "com.openai.codex",
-    "appName": "Codex",
+    "appName": null,
     "officialHost": "openai.com"
   },
-  "checks": [],
+  "checks": [
+    {
+      "url": "https://persistent.oaistatic.com/codex-app-prod/appcast.xml",
+      "extract": {
+        "type": "regex",
+        "pattern": "<sparkle:shortVersionString>([0-9]+(?:\\.[0-9A-Za-z]+){1,5})</sparkle:shortVersionString>",
+        "versionGroup": 1
+      }
+    }
+  ],
   "updatePageURL": "https://developers.openai.com/codex/app",
-  "download": null
+  "download": {
+    "url": null,
+    "sourceURL": "https://persistent.oaistatic.com/codex-app-prod/appcast.xml",
+    "pattern": "<enclosure url=\\\"(https://persistent\\.oaistatic\\.com/codex-app-prod/(?:ChatGPT|Codex)-darwin-arm64-[^\\\"]+\\.zip)\\\"",
+    "urlGroup": 1
+  }
 }

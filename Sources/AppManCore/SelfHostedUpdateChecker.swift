@@ -373,9 +373,12 @@ private extension URLSession {
     func synchronousData(for request: URLRequest) throws -> Data {
         let semaphore = DispatchSemaphore(value: 0)
         var result: Result<Data, Error>!
-        dataTask(with: request) { data, _, error in
+        dataTask(with: request) { data, response, error in
             if let error {
                 result = .failure(error)
+            } else if let response = response as? HTTPURLResponse,
+                      !(200...299).contains(response.statusCode) {
+                result = .failure(HTTPStatusError(statusCode: response.statusCode, url: request.url))
             } else {
                 result = .success(data ?? Data())
             }
@@ -383,6 +386,18 @@ private extension URLSession {
         }.resume()
         semaphore.wait()
         return try result.get()
+    }
+}
+
+private struct HTTPStatusError: LocalizedError {
+    let statusCode: Int
+    let url: URL?
+
+    var errorDescription: String? {
+        if let url {
+            return "HTTP \(statusCode)：\(url.host() ?? url.absoluteString)"
+        }
+        return "HTTP \(statusCode)"
     }
 }
 

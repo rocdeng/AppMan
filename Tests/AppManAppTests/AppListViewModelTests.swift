@@ -61,6 +61,123 @@ final class AppListViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.apps.map(\.updateStatus), [.upToDate, .upToDate, .upToDate])
     }
 
+    @MainActor
+    func testCheckFailurePreservesLastSuccessfulUpdateResult() async throws {
+        let appURL = temporaryAppBundleURL(name: "Cached")
+        try FileManager.default.createDirectory(at: appURL, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: appURL.deletingLastPathComponent()) }
+        var app = makeManualApp(id: "cached", path: appURL)
+        app.updateStatus = .updateAvailable(installedVersion: "1.0", latestVersion: "2.0")
+        app.updateURL = URL(string: "https://example.com/App-2.0-arm64.dmg")
+        app.updateURLIsDirectDownload = true
+        let viewModel = AppListViewModel(
+            updateChecker: FailingResultUpdateChecker(),
+            appCache: AppRecordCache(cacheURL: temporaryCacheURL(), fileManager: .default)
+        )
+        viewModel.replaceAppsForTesting([app])
+
+        await viewModel.checkUpdates()
+
+        XCTAssertEqual(viewModel.apps, [app])
+    }
+
+    @MainActor
+    func testLaunchDropsCachedAppsThatNoLongerExist() throws {
+        let existingAppURL = temporaryAppBundleURL(name: "Existing")
+        let removedAppURL = temporaryAppBundleURL(name: "Removed")
+        try FileManager.default.createDirectory(
+            at: existingAppURL.appendingPathComponent("Contents", isDirectory: true),
+            withIntermediateDirectories: true
+        )
+        let existingApp = makeManualApp(id: "existing", path: existingAppURL)
+        let removedApp = makeManualApp(id: "removed", path: removedAppURL)
+        let cache = AppRecordCache(cacheURL: temporaryCacheURL(), fileManager: .default)
+        try cache.save([existingApp, removedApp])
+
+        let viewModel = AppListViewModel(appCache: cache)
+
+        XCTAssertEqual(viewModel.apps.map(\.path), [existingAppURL])
+        XCTAssertEqual(try cache.load().map(\.path), [existingAppURL])
+    }
+
+    @MainActor
+    func testCheckAllUpdatesDropsCachedAppsThatNoLongerExist() async {
+        let existingAppURL = temporaryAppBundleURL(name: "Existing")
+        let removedAppURL = temporaryAppBundleURL(name: "Removed")
+        try? FileManager.default.createDirectory(
+            at: existingAppURL.appendingPathComponent("Contents", isDirectory: true),
+            withIntermediateDirectories: true
+        )
+        let existingApp = makeManualApp(id: "existing", path: existingAppURL)
+        let removedApp = makeManualApp(id: "removed", path: removedAppURL)
+        let checker = BatchRecordingUpdateChecker()
+        let cache = AppRecordCache(cacheURL: temporaryCacheURL(), fileManager: .default)
+        let viewModel = AppListViewModel(updateChecker: checker, appCache: cache)
+        viewModel.replaceAppsForTesting([existingApp, removedApp])
+
+        await viewModel.checkUpdates()
+
+        XCTAssertEqual(checker.batchSizes, [1])
+        XCTAssertEqual(viewModel.apps.map(\.path), [existingAppURL])
+        XCTAssertEqual((try? cache.load().map(\.path)), [existingAppURL])
+    }
+
+    @MainActor
+    func testUninstallSucceedsWhenAppIsTrashedButRelatedItemFails() async throws {
+        let appURL = temporaryAppBundleURL(name: "Clash Mi")
+        let relatedURL = appURL.deletingLastPathComponent().appendingPathComponent("group.com.nebula.clashmi")
+        let app = makeManualApp(id: "clash-mi", path: appURL)
+        let cache = AppRecordCache(cacheURL: temporaryCacheURL(), fileManager: .default)
+        try cache.save([app])
+        let viewModel = AppListViewModel(
+            appCache: cache,
+            recycleItems: { urls in
+                urls.filter { $0 == relatedURL }
+            }
+        )
+        viewModel.replaceAppsForTesting([app])
+        let candidates = [
+            UninstallCandidate(url: appURL, name: "Clash Mi", kind: .application, sizeBytes: 1, isRequired: true),
+            UninstallCandidate(url: relatedURL, name: relatedURL.lastPathComponent, kind: .groupContainer, sizeBytes: 1),
+        ]
+
+        let didUninstall = await viewModel.uninstall(app, candidates: candidates)
+
+        XCTAssertTrue(didUninstall)
+        XCTAssertTrue(viewModel.apps.isEmpty)
+        XCTAssertEqual(try cache.load(), [])
+        XCTAssertNil(viewModel.errorMessage)
+        XCTAssertEqual(
+            viewModel.uninstallWarningMessage,
+            "主程序已卸载，但以下关联项未能移到废纸篓：\n\n\(relatedURL.path)\n\n这些目录可能受到 macOS 隐私保护。请为 AppMan 授予“完全磁盘访问权限”后再清理。"
+        )
+    }
+
+    @MainActor
+    func testUninstallFailsWhenAppCannotBeTrashed() async {
+        let appURL = temporaryAppBundleURL(name: "Clash Mi")
+        let app = makeManualApp(id: "clash-mi", path: appURL)
+        let viewModel = AppListViewModel(
+            recycleItems: { urls in
+                urls
+            }
+        )
+        viewModel.replaceAppsForTesting([app])
+        let candidate = UninstallCandidate(
+            url: appURL,
+            name: "Clash Mi",
+            kind: .application,
+            sizeBytes: 1,
+            isRequired: true
+        )
+
+        let didUninstall = await viewModel.uninstall(app, candidates: [candidate])
+
+        XCTAssertFalse(didUninstall)
+        XCTAssertEqual(viewModel.apps, [app])
+        XCTAssertNotNil(viewModel.errorMessage)
+    }
+
     func testAppInfoDetailsExposeWebsiteAndDirectLatestVersionLink() {
         let app = AppRecord(
             id: "com.example.direct",
@@ -510,6 +627,26 @@ private final class BatchRecordingUpdateChecker: AppUpdateChecking, @unchecked S
     }
 }
 
+private struct FailingResultUpdateChecker: AppUpdateChecking {
+    func checkUpdates(for apps: [AppRecord]) throws -> [AppRecord] {
+        try checkUpdates(for: apps, onProgress: { _ in })
+    }
+
+    func checkUpdates(
+        for apps: [AppRecord],
+        onProgress: @escaping @Sendable (AppRecord) -> Void
+    ) throws -> [AppRecord] {
+        apps.map { app in
+            var failedApp = app
+            failedApp.updateStatus = .checkFailed(message: "The request timed out.")
+            failedApp.updateURL = URL(string: "https://example.com/check")
+            failedApp.updateURLIsDirectDownload = false
+            onProgress(failedApp)
+            return failedApp
+        }
+    }
+}
+
 private actor AsyncSignal {
     private var didSignal = false
     private var continuations: [CheckedContinuation<Void, Never>] = []
@@ -533,17 +670,26 @@ private actor AsyncSignal {
     }
 }
 
-private func makeManualApp(id: String) -> AppRecord {
+private func makeManualApp(
+    id: String,
+    path: URL? = nil
+) -> AppRecord {
     AppRecord(
         id: "com.example.\(id)",
         name: id,
         bundleIdentifier: "com.example.\(id)",
         shortVersion: "1.0",
         buildVersion: nil,
-        path: URL(fileURLWithPath: "/Applications/\(id).app"),
+        path: path ?? URL(fileURLWithPath: "/Applications/\(id).app"),
         sizeBytes: 1,
         installSource: .manual(reason: "self")
     )
+}
+
+private func temporaryAppBundleURL(name: String) -> URL {
+    FileManager.default.temporaryDirectory
+        .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        .appendingPathComponent("\(name).app", isDirectory: true)
 }
 
 private func temporaryCacheURL() -> URL {

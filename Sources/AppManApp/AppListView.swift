@@ -80,7 +80,6 @@ struct AppListView: View {
                     searchText: $searchText,
                     showsHeader: selectedSection == .apps,
                     hasSelection: selectedApp != nil,
-                    canCheckUpdates: !viewModel.apps.isEmpty,
                     isScanning: viewModel.isScanning,
                     isCheckingUpdates: viewModel.isCheckingUpdates,
                     isUpdatingApp: viewModel.isUpdatingApp,
@@ -93,7 +92,11 @@ struct AppListView: View {
                             await viewModel.checkUpdates(for: selectedApp)
                         }
                     },
+                    refreshAppList: {
+                        await viewModel.scan()
+                    },
                     checkAllUpdates: {
+                        await viewModel.scan()
                         await viewModel.checkUpdates()
                     },
                     updateAll: {
@@ -128,6 +131,24 @@ struct AppListView: View {
             Button("好", role: .cancel) {}
         } message: {
             Text(viewModel.errorMessage ?? "未知错误")
+        }
+        .alert(
+            "部分关联项未清理",
+            isPresented: Binding(
+                get: { viewModel.uninstallWarningMessage != nil },
+                set: { isPresented in
+                    if !isPresented {
+                        viewModel.uninstallWarningMessage = nil
+                    }
+                }
+            )
+        ) {
+            Button("显示 AppMan 并打开设置") {
+                openFullDiskAccessSettings()
+            }
+            Button("好", role: .cancel) {}
+        } message: {
+            Text(viewModel.uninstallWarningMessage ?? "")
         }
         .overlay(alignment: .top) {
             if let statusMessage = viewModel.statusMessage {
@@ -188,6 +209,21 @@ struct AppListView: View {
                 if viewModel.automaticallyChecksUpdatesOnLaunch {
                     await viewModel.checkUpdates()
                 }
+            }
+        }
+    }
+
+    private func openFullDiskAccessSettings() {
+        let appURL = Bundle.main.bundleURL
+        guard appURL.pathExtension.localizedCaseInsensitiveCompare("app") == .orderedSame else {
+            viewModel.errorMessage = "当前通过 swift run 启动的 AppMan 不是标准 .app，无法添加到“完全磁盘访问权限”列表。请退出后运行 Scripts/open_app.sh，再重新授权。"
+            return
+        }
+
+        NSWorkspace.shared.activateFileViewerSelecting([appURL])
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+            if let settingsURL = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles") {
+                NSWorkspace.shared.open(settingsURL)
             }
         }
     }
@@ -306,7 +342,7 @@ private struct ProgressOverlay: View {
                     .monospacedDigit()
                     .fixedSize(horizontal: false, vertical: true)
             }
-            .frame(minWidth: 300)
+            .frame(minWidth: 260)
             .padding(20)
             .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8))
         }
@@ -355,13 +391,13 @@ private struct AppChromeView: View {
     @Binding var searchText: String
     let showsHeader: Bool
     let hasSelection: Bool
-    let canCheckUpdates: Bool
     let isScanning: Bool
     let isCheckingUpdates: Bool
     let isUpdatingApp: Bool
     let isUninstalling: Bool
     let showInfo: () -> Void
     let checkSelectedAppUpdates: () async -> Void
+    let refreshAppList: () async -> Void
     let checkAllUpdates: () async -> Void
     let updateAll: () async -> Void
     let uninstall: () -> Void
@@ -391,9 +427,10 @@ private struct AppChromeView: View {
                             systemImage: "arrow.clockwise.circle",
                             help: "检查更新",
                             isPrimaryDisabled: isBusy || !hasSelection,
-                            isMenuDisabled: isBusy || !canCheckUpdates,
+                            isMenuDisabled: isBusy,
                             primaryAction: checkSelectedAppUpdates,
                             menuItems: [
+                                LiquidSplitMenuButton.Item(title: "更新 APP 列表", action: refreshAppList),
                                 LiquidSplitMenuButton.Item(title: "检查所有更新", action: checkAllUpdates),
                                 LiquidSplitMenuButton.Item(title: "更新所有", action: updateAll),
                             ]
@@ -1168,11 +1205,11 @@ private struct LiquidSearchControl: View {
                 }
                 .shadow(color: Color.black.opacity(0.08), radius: 12, x: 0, y: 3)
                 .onAppear {
-                    isFocused = true
+                    focusSearchField()
                 }
                 .onChange(of: focusToken) { _ in
                     isExpanded = true
-                    isFocused = true
+                    focusSearchField()
                 }
                 .onChange(of: isFocused) { focused in
                     if !focused {
@@ -1183,6 +1220,7 @@ private struct LiquidSearchControl: View {
             } else {
                 Button {
                     isExpanded = true
+                    focusSearchField()
                 } label: {
                     Image(systemName: "magnifyingglass")
                         .font(.system(size: 20.5, weight: .regular))
@@ -1193,6 +1231,12 @@ private struct LiquidSearchControl: View {
                 .liquidGlassCircle()
                 .help("搜索 App")
             }
+        }
+    }
+
+    private func focusSearchField() {
+        DispatchQueue.main.async {
+            isFocused = true
         }
     }
 }

@@ -29,7 +29,9 @@ public enum UninstallCandidateKind: String, Equatable, Sendable {
     case applicationSupport
     case cache
     case preferences
+    case applicationScript
     case container
+    case groupContainer
     case log
     case savedState
     case installer
@@ -45,8 +47,12 @@ public enum UninstallCandidateKind: String, Equatable, Sendable {
             return "缓存"
         case .preferences:
             return "配置"
+        case .applicationScript:
+            return "应用脚本"
         case .container:
             return "容器数据"
+        case .groupContainer:
+            return "共享容器"
         case .log:
             return "日志"
         case .savedState:
@@ -104,6 +110,15 @@ public struct UninstallCandidateFinder: Sendable {
             candidates: &candidates,
             seenPaths: &seenPaths
         )
+        if let bundleIdentifier, !bundleIdentifier.isEmpty {
+            appendCandidate(
+                at: libraryDirectory.appendingPathComponent("Application Scripts/\(bundleIdentifier)", isDirectory: true),
+                name: bundleIdentifier,
+                kind: .applicationScript,
+                candidates: &candidates,
+                seenPaths: &seenPaths
+            )
+        }
         appendMatchingChildren(
             in: libraryDirectory.appendingPathComponent("Containers", isDirectory: true),
             matching: names + [bundleIdentifier].compactMap { $0 },
@@ -111,6 +126,15 @@ public struct UninstallCandidateFinder: Sendable {
             candidates: &candidates,
             seenPaths: &seenPaths
         )
+        if let bundleIdentifier, !bundleIdentifier.isEmpty {
+            appendMatchingChildren(
+                in: libraryDirectory.appendingPathComponent("Group Containers", isDirectory: true),
+                matching: [bundleIdentifier],
+                kind: .groupContainer,
+                candidates: &candidates,
+                seenPaths: &seenPaths
+            )
+        }
         appendMatchingChildren(
             in: libraryDirectory.appendingPathComponent("Logs", isDirectory: true),
             matching: names + [bundleIdentifier].compactMap { $0 },

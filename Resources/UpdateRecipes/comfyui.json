@@ -1,15 +1,15 @@
 {
   "id": "com.todesktop.241012ess7yxs0e",
-  "name": "ComfyUI",
-  "recipePrompt": "这个规则用于检测 ComfyUI Desktop。Electron updater 配置指向 https://updater.comfy.org，latest-mac.yml 里 version 字段是最新桌面版版本。",
+  "name": "Comfy Desktop",
+  "recipePrompt": "这个规则用于检测 Comfy Desktop。应用包内 app-update.yml 指向 ToDesktop 官方更新源 https://download.todesktop.com/241130tqe9q3y；latest-mac.yml 同时提供 version 和 arm64 安装包。",
   "match": {
     "bundleIdentifier": "com.todesktop.241012ess7yxs0e",
-    "appName": "ComfyUI",
+    "appName": null,
     "officialHost": "comfy.org"
   },
   "checks": [
     {
-      "url": "https://updater.comfy.org/latest-mac.yml",
+      "url": "https://download.todesktop.com/241130tqe9q3y/latest-mac.yml",
       "extract": {
         "type": "regex",
         "pattern": "(?m)^version:\\s*([0-9]+(?:\\.[0-9A-Za-z]+){1,5})\\s*$",
@@ -20,7 +20,7 @@
   "updatePageURL": "https://www.comfy.org/download",
   "download": {
     "url": null,
-    "sourceURL": "https://updater.comfy.org/latest-mac.yml",
+    "sourceURL": "https://download.todesktop.com/241130tqe9q3y/latest-mac.yml",
     "pattern": "url:\\s*(.+\\.(?:dmg|zip))",
     "urlGroup": 1
   }

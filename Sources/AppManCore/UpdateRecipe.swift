@@ -69,12 +69,20 @@ public struct UpdateRecipe: Codable, Equatable, Identifiable, Sendable {
     public struct Download: Codable, Equatable, Sendable {
         public let url: URL?
         public let sourceURL: URL?
+        public let sourceURLTemplate: String?
         public let pattern: String?
         public let urlGroup: Int?
 
-        public init(url: URL?, sourceURL: URL?, pattern: String?, urlGroup: Int?) {
+        public init(
+            url: URL?,
+            sourceURL: URL?,
+            sourceURLTemplate: String? = nil,
+            pattern: String?,
+            urlGroup: Int?
+        ) {
             self.url = url
             self.sourceURL = sourceURL
+            self.sourceURLTemplate = sourceURLTemplate
             self.pattern = pattern
             self.urlGroup = urlGroup
         }
@@ -205,7 +213,10 @@ struct UpdateRecipeRunner: Sendable {
             return url
         }
 
-        guard let sourceURL = download.sourceURL,
+        let sourceURL = download.sourceURL ?? download.sourceURLTemplate.flatMap { template in
+            URL(string: template.replacingOccurrences(of: "{version}", with: latestVersion))
+        }
+        guard let sourceURL,
               let pattern = download.pattern else {
             return nil
         }
