@@ -1,0 +1,27 @@
+{
+  "id": "com.netease.uuremote",
+  "name": "UURemote",
+  "recipePrompt": "这个规则用于识别网易 UU 远程 macOS 客户端。官方 uuyc.163.com/download/ 页面通过 JSON-LD 和页面文本分别提供 macOS 版本与官方 gw_mac 下载入口；版本提取必须限定在 macOS 版客户端区块，不能误取 Windows 4.38.3。下载入口虽然是无扩展名重定向 URL，但由官方页面的 downloadUrl 提供，作为直接下载地址使用。",
+  "match": {
+    "bundleIdentifier": "com.netease.uuremote",
+    "appName": "UURemote",
+    "officialHost": "163.com"
+  },
+  "checks": [
+    {
+      "url": "https://uuyc.163.com/download/",
+      "extract": {
+        "type": "regex",
+        "pattern": "(?s)macOS 版客户端.{0,3000}?当前版本：V\\s*([0-9]+(?:\\.[0-9]+){1,5})",
+        "versionGroup": 1
+      }
+    }
+  ],
+  "updatePageURL": "https://uuyc.163.com/download/",
+  "download": {
+    "url": null,
+    "sourceURL": "https://uuyc.163.com/download/",
+    "pattern": "\\\"downloadUrl\\\":\\\"(https://adl\\.netease\\.com/d/g/uuremote/c/gw_mac)\\\"",
+    "urlGroup": 1
+  }
+}

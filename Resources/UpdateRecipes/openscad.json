@@ -1,0 +1,28 @@
+{
+  "id": "org.openscad.OpenSCAD",
+  "name": "OpenSCAD",
+  "recipePrompt": "这个规则用于检测 OpenSCAD macOS Development Snapshot。App 的 CFBundleShortVersionString 只有年月，必须用 CFBundleVersion 与完整快照日期比较。官方快照目录中的 OpenSCAD-YYYY.MM.DD.dmg 同时提供版本和 Universal 安装包。不要使用 App 内置的 appcast.xml，它只停留在 2019.05。",
+  "installedVersionSource": "buildVersion",
+  "match": {
+    "bundleIdentifier": "org.openscad.OpenSCAD",
+    "appName": "OpenSCAD",
+    "officialHost": "openscad.org"
+  },
+  "checks": [
+    {
+      "url": "https://files.openscad.org/snapshots/",
+      "extract": {
+        "type": "linkRegex",
+        "pattern": "OpenSCAD-([0-9]{4}(?:\\.[0-9]{2}){2})\\.dmg",
+        "versionGroup": 1
+      }
+    }
+  ],
+  "updatePageURL": "https://openscad.org/downloads.html#snapshots",
+  "download": {
+    "url": null,
+    "sourceURL": "https://files.openscad.org/snapshots/",
+    "pattern": "href=\"(OpenSCAD-[0-9]{4}(?:\\.[0-9]{2}){2}\\.dmg)\"",
+    "urlGroup": 1
+  }
+}

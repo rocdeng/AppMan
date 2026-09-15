@@ -13,7 +13,9 @@ recipes_dir="$project_root/Resources/UpdateRecipes"
 swift build
 bin_path="$(swift build --show-bin-path)"
 
-rm -rf "$bundle_dir"
+if [[ -e "$bundle_dir" ]]; then
+  mv "$bundle_dir" "$HOME/.Trash/AppMan-build-$(date +%Y%m%d-%H%M%S).app"
+fi
 mkdir -p "$macos_dir" "$resources_dir"
 
 cp "$bin_path/AppMan" "$macos_dir/AppMan"

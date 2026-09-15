@@ -436,6 +436,66 @@ final class SelfHostedUpdateCheckerTests: XCTestCase {
         XCTAssertEqual(apps.first?.updateURLIsDirectDownload, true)
     }
 
+    func testExplicitRecipeDownloadPrefersCurrentMacOSVersionPackage() throws {
+        let currentMajorVersion = ProcessInfo.processInfo.operatingSystemVersion.majorVersion
+        let futureMajorVersion = currentMajorVersion + 1
+        let recipe = UpdateRecipe(
+            id: "com.example.system-version",
+            name: "SystemVersionApp",
+            recipePrompt: "Prefer the package matching the current macOS version.",
+            match: UpdateRecipe.Match(
+                bundleIdentifier: "com.example.system-version",
+                appName: "SystemVersionApp",
+                officialHost: "example.com"
+            ),
+            checks: [
+                UpdateRecipe.Check(
+                    url: URL(string: "https://example.com/releases/latest")!,
+                    extract: UpdateRecipe.Extract(
+                        type: .regex,
+                        pattern: #"tag_name"\s*:\s*"v?([0-9]+(?:\.[0-9A-Za-z]+){1,5})"#,
+                        versionGroup: 1
+                    )
+                ),
+            ],
+            updatePageURL: URL(string: "https://example.com/releases")!,
+            download: UpdateRecipe.Download(
+                url: nil,
+                sourceURL: URL(string: "https://example.com/releases/latest")!,
+                pattern: #"browser_download_url"\s*:\s*"([^"]*\.dmg)"#,
+                urlGroup: 1
+            )
+        )
+        let checker = SelfHostedUpdateChecker(
+            sourceStore: SelfUpdateSourceStore(storeURL: temporaryURL()),
+            googleSearcher: FailingSelfUpdateSearcher(),
+            recipeStore: StubUpdateRecipeStore(recipes: [recipe]),
+            fetchData: { _ in Data("""
+            {
+              "tag_name": "v2.0.0",
+              "assets": [
+                { "browser_download_url": "https://example.com/SystemVersionApp-2.0.0-macos\(futureMajorVersion).dmg" },
+                { "browser_download_url": "https://example.com/SystemVersionApp-2.0.0-macos\(currentMajorVersion).dmg" }
+              ]
+            }
+            """.utf8) }
+        )
+
+        let apps = try checker.checkUpdates(for: [
+            makeManualApp(
+                bundleIdentifier: "com.example.system-version",
+                name: "SystemVersionApp",
+                shortVersion: "1.0.0"
+            ),
+        ])
+
+        XCTAssertEqual(
+            apps.first?.updateURL,
+            URL(string: "https://example.com/SystemVersionApp-2.0.0-macos\(currentMajorVersion).dmg")
+        )
+        XCTAssertEqual(apps.first?.updateURLIsDirectDownload, true)
+    }
+
     func testRecipeDownloadSourceURLTemplateUsesLatestVersion() throws {
         let recipe = UpdateRecipe(
             id: "com.example.template",

@@ -199,6 +199,7 @@ public struct SelfHostedUpdateChecker: AppUpdateChecking {
 
     private func checkUpdate(for app: AppRecord, recipe: UpdateRecipe) -> AppRecord {
         var updatedApp = app
+        let installedVersion = recipe.installedVersion(for: app)
         updatedApp.updateURL = recipe.updatePageURL ?? recipe.checks.first?.url
         updatedApp.updateURLIsDirectDownload = false
 
@@ -210,13 +211,13 @@ public struct SelfHostedUpdateChecker: AppUpdateChecking {
             }
 
             let latestVersion = release.latestVersion
-            if AppVersionComparator.isLatestVersion(latestVersion, newerThan: app.shortVersion) {
+            if AppVersionComparator.isLatestVersion(latestVersion, newerThan: installedVersion) {
                 if let packageURL = release.packageURL {
                     updatedApp.updateURL = packageURL
                     updatedApp.updateURLIsDirectDownload = true
                 }
                 updatedApp.updateStatus = .updateAvailable(
-                    installedVersion: app.shortVersion,
+                    installedVersion: installedVersion,
                     latestVersion: latestVersion
                 )
             } else {
@@ -369,7 +370,7 @@ private enum GoogleSearchResultParser {
     }
 }
 
-private extension URLSession {
+extension URLSession {
     func synchronousData(for request: URLRequest) throws -> Data {
         let semaphore = DispatchSemaphore(value: 0)
         var result: Result<Data, Error>!
@@ -613,7 +614,7 @@ public struct SparkleFeedUpdateDetector: SelfHostedUpdateDetecting {
     }
 }
 
-private final class SparkleReleaseParser: NSObject, XMLParserDelegate {
+final class SparkleReleaseParser: NSObject, XMLParserDelegate {
     private struct Item {
         let version: String
         let packageURL: URL?

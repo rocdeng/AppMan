@@ -12,7 +12,7 @@
       "url": "https://mkvtoolnix.download/macos/releases/",
       "extract": {
         "type": "regex",
-        "pattern": "href=\\\"/macos/releases/([0-9]+(?:\\.[0-9]+){1,2})/\\\"",
+        "pattern": "href=\\\"(?:\\./|/macos/releases/)([0-9]+(?:\\.[0-9]+){1,2})/\\\"",
         "versionGroup": 1
       }
     }
@@ -22,7 +22,7 @@
     "url": null,
     "sourceURL": null,
     "sourceURLTemplate": "https://mkvtoolnix.download/macos/releases/{version}/",
-    "pattern": "href=\\\"(/macos/releases/[0-9.]+/MKVToolNix-[^\\\"]+\\.dmg)\\\"",
+    "pattern": "href=\\\"(?:\\./|/macos/releases/[0-9.]+/)(MKVToolNix-[^\\\"]+\\.dmg)\\\"",
     "urlGroup": 1
   }
 }

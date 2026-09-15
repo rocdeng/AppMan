@@ -1,0 +1,73 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "id",
+    "name",
+    "recipePrompt",
+    "installedVersionSource",
+    "match",
+    "checks",
+    "updatePageURL",
+    "download"
+  ],
+  "properties": {
+    "id": { "type": "string" },
+    "name": { "type": "string" },
+    "recipePrompt": { "type": ["string", "null"] },
+    "installedVersionSource": {
+      "type": ["string", "null"],
+      "enum": ["shortVersion", "buildVersion", null]
+    },
+    "match": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["bundleIdentifier", "appName", "officialHost"],
+      "properties": {
+        "bundleIdentifier": { "type": ["string", "null"] },
+        "appName": { "type": ["string", "null"] },
+        "officialHost": { "type": ["string", "null"] }
+      }
+    },
+    "checks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["url", "extract"],
+        "properties": {
+          "url": { "type": "string" },
+          "extract": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["type", "pattern", "versionGroup"],
+            "properties": {
+              "type": { "type": "string", "enum": ["regex", "linkRegex"] },
+              "pattern": { "type": "string" },
+              "versionGroup": { "type": "integer", "minimum": 0 }
+            }
+          }
+        }
+      }
+    },
+    "updatePageURL": { "type": ["string", "null"] },
+    "download": {
+      "anyOf": [
+        { "type": "null" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["url", "sourceURL", "sourceURLTemplate", "pattern", "urlGroup"],
+          "properties": {
+            "url": { "type": ["string", "null"] },
+            "sourceURL": { "type": ["string", "null"] },
+            "sourceURLTemplate": { "type": ["string", "null"] },
+            "pattern": { "type": ["string", "null"] },
+            "urlGroup": { "type": ["integer", "null"], "minimum": 0 }
+          }
+        }
+      ]
+    }
+  }
+}

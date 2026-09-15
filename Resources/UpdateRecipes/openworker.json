@@ -1,0 +1,27 @@
+{
+  "id": "com.openworker.desktop",
+  "name": "OpenWorker",
+  "recipePrompt": "这个规则用于检测 OpenWorker。App 二进制内置的官方更新源是 https://download.openworker.com/latest.json，version 字段是最新版。当前 macOS Apple Silicon 安装包为 .app.tar.gz，不属于 AppMan 现有可自动安装的 DMG、PKG、ZIP 范围，因此发现更新时打开官方 GitHub Releases 页面手工下载。不要使用搜索结果中的 X 帖子作为官网。",
+  "match": {
+    "bundleIdentifier": "com.openworker.desktop",
+    "appName": "OpenWorker",
+    "officialHost": "openworker.com"
+  },
+  "checks": [
+    {
+      "url": "https://download.openworker.com/latest.json",
+      "extract": {
+        "type": "regex",
+        "pattern": "\"version\"\\s*:\\s*\"([0-9]+(?:\\.[0-9A-Za-z]+){1,5})\"",
+        "versionGroup": 1
+      }
+    }
+  ],
+  "updatePageURL": "https://github.com/andrewyng/openworker/releases/latest",
+  "download": {
+    "url": null,
+    "sourceURL": null,
+    "pattern": null,
+    "urlGroup": null
+  }
+}

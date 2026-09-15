@@ -22,7 +22,10 @@ public extension AppUpdateChecking {
 public struct HomebrewCaskUpdateChecker: AppUpdateChecking {
     private let commandRunner: any CommandRunning
 
-    public init(commandRunner: any CommandRunning = ProcessCommandRunner()) {
+    public init(commandRunner: any CommandRunning = ProcessCommandRunner(
+        environment: ["HOMEBREW_NO_AUTO_UPDATE": "1"],
+        timeout: 30
+    )) {
         self.commandRunner = commandRunner
     }
 

@@ -1,0 +1,22 @@
+{
+  "id": "dev.kdrag0n.MacVirt",
+  "name": "OrbStack",
+  "recipePrompt": "这个规则用于识别 OrbStack Apple Silicon 稳定版。OrbStack 应用内使用官方 api-updates.orbstack.dev 的 arm64 Sparkle appcast；从 sparkle:shortVersionString 读取用户可见版本，并使用同一条 enclosure 的 arm64 DMG。不要使用新闻站点或第三方下载页。",
+  "match": {
+    "bundleIdentifier": "dev.kdrag0n.MacVirt",
+    "appName": "OrbStack",
+    "officialHost": "orbstack.dev"
+  },
+  "checks": [
+    {
+      "url": "https://api-updates.orbstack.dev/arm64/appcast.xml?bucket=stable",
+      "extract": {
+        "type": "regex",
+        "pattern": "<sparkle:shortVersionString>([0-9]+(?:\\.[0-9]+){1,5})</sparkle:shortVersionString>",
+        "versionGroup": 1
+      }
+    }
+  ],
+  "updatePageURL": "https://orbstack.dev/download",
+  "download": null
+}

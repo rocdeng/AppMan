@@ -76,6 +76,28 @@ final class AppScannerTests: XCTestCase {
         XCTAssertEqual(records.map(\.bundleIdentifier), ["com.example.valid"])
     }
 
+    func testKeepsFirstAppWhenScanRootsContainDuplicateBundleIdentifier() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let primaryRoot = root.appendingPathComponent("Primary", isDirectory: true)
+        let secondaryRoot = root.appendingPathComponent("Secondary", isDirectory: true)
+        try FileManager.default.createDirectory(at: primaryRoot, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: secondaryRoot, withIntermediateDirectories: true)
+        try createApp(named: "Primary.app", displayName: "Duplicate", bundleID: "com.example.duplicate", in: primaryRoot)
+        try createApp(named: "Secondary.app", displayName: "Duplicate", bundleID: "com.example.duplicate", in: secondaryRoot)
+
+        let scanner = AppScanner(scanRoots: [primaryRoot, secondaryRoot])
+        let records = try scanner.scanInstalledApps()
+
+        XCTAssertEqual(records.count, 1)
+        XCTAssertEqual(
+            records.first?.path.resolvingSymlinksInPath(),
+            primaryRoot.appendingPathComponent("Primary.app", isDirectory: true).resolvingSymlinksInPath()
+        )
+    }
+
     private func createApp(named name: String, bundleID: String, in directory: URL) throws {
         try createApp(named: name, displayName: nil, bundleID: bundleID, in: directory)
     }

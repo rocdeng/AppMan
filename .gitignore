@@ -20,6 +20,8 @@ Icon
 ### Swift
 # Swift Package Manager build output
 .build/
+.build-intel/
+dist/
 
 # SwiftPM/Xcode local workspace state
 .swiftpm/
@@ -47,3 +49,7 @@ playground.xcworkspace
 
 # Swift Package Manager
 # Package.resolved
+
+### Python
+__pycache__/
+*.py[cod]

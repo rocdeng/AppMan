@@ -1,18 +1,27 @@
 {
   "id": "com.panic.Transmit",
   "name": "Transmit",
-  "recipePrompt": "这个规则用于识别 Panic Transmit。app 内带有 Panic 更新接口，但当前规则引擎还不能表达需要 query 参数/产品参数的专用协议，先不自动抽取版本。",
+  "recipePrompt": "这个规则用于检测 Panic Transmit 5。官方 Sparkle 接口必须带 appName=Transmit 5 和 appVersion=5，否则会返回 400；从 enclosure 的 sparkle:shortVersionString 读取版本并获取官方 ZIP。",
   "match": {
     "bundleIdentifier": "com.panic.Transmit",
     "appName": "Transmit",
     "officialHost": "panic.com"
   },
-  "checks": [],
+  "checks": [
+    {
+      "url": "https://www.panic.com/updates/update.php?appName=Transmit%205&appVersion=5",
+      "extract": {
+        "type": "regex",
+        "pattern": "sparkle:shortVersionString=\"([0-9]+(?:\\.[0-9A-Za-z]+){1,5})\"",
+        "versionGroup": 1
+      }
+    }
+  ],
   "updatePageURL": "https://www.panic.com/transmit/",
   "download": {
-    "url": "https://download.panic.com/transmit/Transmit-5-Latest.zip",
-    "sourceURL": null,
-    "pattern": null,
-    "urlGroup": null
+    "url": null,
+    "sourceURL": "https://www.panic.com/updates/update.php?appName=Transmit%205&appVersion=5",
+    "pattern": "url=\"([^\"]*Transmit(?:%20|\\s)+[0-9]+(?:\\.[0-9A-Za-z]+){1,5}\\.zip)\"",
+    "urlGroup": 1
   }
 }

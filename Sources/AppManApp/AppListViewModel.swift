@@ -78,6 +78,30 @@ private struct WebsiteLink: Equatable {
     let url: URL
 }
 
+struct RecipeValidationPresentation: Identifiable, Equatable {
+    enum State: Equatable {
+        case validating
+        case completed(UpdateRecipeValidationResult)
+        case failed(String)
+    }
+
+    let id: String
+    let app: AppRecord
+    let recipe: UpdateRecipe
+    let recipeJSON: String
+    var state: State
+}
+
+struct DownloadFailurePrompt: Identifiable, Equatable {
+    let appName: String
+    let message: String
+    let websiteURL: URL
+
+    var id: String {
+        "\(appName)|\(websiteURL.absoluteString)"
+    }
+}
+
 private final class CheckUpdateProgress: @unchecked Sendable {
     private let lock = NSLock()
     private var completed = 0
@@ -104,6 +128,9 @@ final class AppListViewModel: ObservableObject {
     @Published var automaticallyChecksUpdatesOnLaunch = false
     @Published var tinyFishAPIKey = ""
     @Published var errorMessage: String?
+    @Published var recipeValidationNotice: String?
+    @Published private(set) var recipeValidationPresentation: RecipeValidationPresentation?
+    @Published private(set) var downloadFailurePrompt: DownloadFailurePrompt?
 
     var hasCachedApps: Bool {
         !apps.isEmpty
@@ -116,7 +143,9 @@ final class AppListViewModel: ObservableObject {
     private let ignoreListStore: UpdateIgnoreListStore
     private let preferencesStore: AppPreferencesStore
     private let selfUpdateSourceStore: SelfUpdateSourceStore
+    private let recipeValidationService: UpdateRecipeValidationService
     private let homebrewUpdater: HomebrewCaskUpdater
+    private let downloadedAppInstaller: any DownloadedAppInstalling
     private let appBundleReader: AppBundleReader
     private let fileManager: FileManager
     private let downloadsDirectory: URL?
@@ -134,7 +163,9 @@ final class AppListViewModel: ObservableObject {
         ignoreListStore: UpdateIgnoreListStore = UpdateIgnoreListStore(),
         preferencesStore: AppPreferencesStore = AppPreferencesStore(),
         selfUpdateSourceStore: SelfUpdateSourceStore = SelfUpdateSourceStore(),
+        recipeValidationService: UpdateRecipeValidationService = UpdateRecipeValidationService(),
         homebrewUpdater: HomebrewCaskUpdater = HomebrewCaskUpdater(),
+        downloadedAppInstaller: any DownloadedAppInstalling = DownloadedAppInstaller(),
         appBundleReader: AppBundleReader = AppBundleReader(),
         fileManager: FileManager = .default,
         downloadsDirectory: URL? = nil,
@@ -166,7 +197,9 @@ final class AppListViewModel: ObservableObject {
         self.ignoreListStore = ignoreListStore
         self.preferencesStore = preferencesStore
         self.selfUpdateSourceStore = selfUpdateSourceStore
+        self.recipeValidationService = recipeValidationService
         self.homebrewUpdater = homebrewUpdater
+        self.downloadedAppInstaller = downloadedAppInstaller
         self.appBundleReader = appBundleReader
         self.fileManager = fileManager
         self.downloadsDirectory = downloadsDirectory
@@ -224,6 +257,44 @@ final class AppListViewModel: ObservableObject {
 
     func checkUpdates(for app: AppRecord) async {
         await checkUpdates(appsToCheck: [app.path])
+    }
+
+    func validateRecipe(for app: AppRecord) async {
+        do {
+            guard let recipe = try recipeValidationService.matchingRecipe(for: app) else {
+                recipeValidationNotice = "“\(app.name)”没有匹配的 Recipe。"
+                return
+            }
+
+            let recipeJSON = try Self.formattedRecipeJSON(recipe)
+            recipeValidationPresentation = RecipeValidationPresentation(
+                id: app.path.standardizedFileURL.path,
+                app: app,
+                recipe: recipe,
+                recipeJSON: recipeJSON,
+                state: .validating
+            )
+
+            let service = recipeValidationService
+            let result = try await Task.detached(priority: .userInitiated) {
+                try service.validate(app: app, recipe: recipe)
+            }.value
+
+            guard recipeValidationPresentation?.id == app.path.standardizedFileURL.path else {
+                return
+            }
+            recipeValidationPresentation?.state = .completed(result)
+        } catch {
+            if recipeValidationPresentation?.id == app.path.standardizedFileURL.path {
+                recipeValidationPresentation?.state = .failed(error.localizedDescription)
+            } else {
+                recipeValidationNotice = "Recipe 读取失败：\(error.localizedDescription)"
+            }
+        }
+    }
+
+    func dismissRecipeValidation() {
+        recipeValidationPresentation = nil
     }
 
     private func checkUpdates(appsToCheck appPaths: Set<URL>?) async {
@@ -301,6 +372,12 @@ final class AppListViewModel: ObservableObject {
 
         updateProgressText = nil
         isCheckingUpdates = false
+    }
+
+    private static func formattedRecipeJSON(_ recipe: UpdateRecipe) throws -> String {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
+        return String(decoding: try encoder.encode(recipe), as: UTF8.self)
     }
 
     func ignoreUpdates(for app: AppRecord) {
@@ -483,7 +560,7 @@ final class AppListViewModel: ObservableObject {
         }
 
         if didUpdateHomebrewCask {
-            await checkUpdates()
+            await refreshHomebrewUpdateStatuses()
         }
     }
 
@@ -493,6 +570,18 @@ final class AppListViewModel: ObservableObject {
 
     func clearStatusMessage() {
         statusMessage = nil
+    }
+
+    func dismissDownloadFailurePrompt() {
+        downloadFailurePrompt = nil
+    }
+
+    func openDownloadFailureWebsite(openURL: @MainActor (URL) -> Void) {
+        guard let prompt = downloadFailurePrompt else {
+            return
+        }
+        downloadFailurePrompt = nil
+        openURL(prompt.websiteURL)
     }
 
     nonisolated private static func displayPath(_ url: URL) -> String {
@@ -518,7 +607,11 @@ final class AppListViewModel: ObservableObject {
     ) async -> Bool {
         switch app.installSource {
         case let .homebrewCask(token):
-            return await updateHomebrewCask(token: token, refreshAfterUpdate: refreshAfterHomebrewUpdate)
+            return await updateHomebrewCask(
+                app: app,
+                token: token,
+                refreshAfterUpdate: refreshAfterHomebrewUpdate
+            )
         case .macAppStore:
             guard let updateURL = app.updateURL else {
                 errorMessage = "缺少更新地址"
@@ -533,7 +626,7 @@ final class AppListViewModel: ObservableObject {
             }
 
             if Self.shouldDownloadPackage(for: app) {
-                return await downloadPackage(from: updateURL)
+                return await downloadPackage(from: updateURL, for: app)
             }
 
             openURL(updateURL)
@@ -541,11 +634,13 @@ final class AppListViewModel: ObservableObject {
         }
     }
 
-    private func downloadPackage(from url: URL) async -> Bool {
+    private func downloadPackage(from url: URL, for app: AppRecord) async -> Bool {
         isUpdatingApp = true
         updateProgressText = "正在准备下载..."
         errorMessage = nil
+        downloadFailurePrompt = nil
         var didDownload = false
+        var downloadedPackageURL: URL?
 
         do {
             let fileManager = self.fileManager
@@ -583,15 +678,78 @@ final class AppListViewModel: ObservableObject {
                 try data.write(to: destinationURL, options: [.atomic])
                 return destinationURL
             }.value
+            downloadedPackageURL = destinationURL
 
-            updateProgressText = "正在打开安装包..."
-            openDownloadedPackage(destinationURL)
+            if Self.canAutomaticallyInstall(destinationURL) {
+                updateProgressText = destinationURL.pathExtension.lowercased() == "dmg"
+                    ? "正在挂载磁盘镜像并安装 App..."
+                    : "正在解压缩并安装 App..."
+                let installer = downloadedAppInstaller
+                let result = try await Task.detached(priority: .userInitiated) {
+                    try installer.install(packageURL: destinationURL, replacing: app) { [weak self] progress in
+                        Task { @MainActor [weak self] in
+                            switch progress {
+                            case .requestingQuit:
+                                self?.updateProgressText = "正在请求 \(app.name) 退出..."
+                            case .waitingForQuit:
+                                self?.updateProgressText = "正在等待 \(app.name) 完全退出..."
+                            case .replacingApplication:
+                                self?.updateProgressText = "正在替换 App..."
+                            case .reopeningApplication:
+                                self?.updateProgressText = "正在重新打开 \(app.name)..."
+                            }
+                        }
+                    }
+                }.value
+
+                switch result {
+                case .installed:
+                    updateProgressText = "正在刷新 App 信息..."
+                    try refreshInstalledApp(app)
+                    updateProgressText = "正在将安装包移到废纸篓..."
+                    let failedPackages = await recycleItems([destinationURL])
+                    statusMessage = failedPackages.isEmpty
+                        ? "\(app.name) 已更新"
+                        : "\(app.name) 已更新，但安装包未能移到废纸篓"
+                case .requiresManualInstallation:
+                    updateProgressText = "正在打开安装包..."
+                    openDownloadedPackage(destinationURL)
+                }
+            } else {
+                updateProgressText = "正在打开安装包..."
+                openDownloadedPackage(destinationURL)
+            }
             didDownload = true
         } catch where Self.isCancellation(error) {
             statusMessage = "已取消下载"
             didDownload = false
+        } catch DownloadedAppInstallerError.unableToQuitApplication(let name) {
+            errorMessage = "\(name) 未能完全退出，已取消更新；旧版本未被替换"
+            didDownload = false
+        } catch DownloadedAppInstallerError.unableToReopenApplication(let name) {
+            try? refreshInstalledApp(app)
+            let failedPackages = if let downloadedPackageURL {
+                await recycleItems([downloadedPackageURL])
+            } else {
+                []
+            }
+            errorMessage = failedPackages.isEmpty
+                ? "\(name) 已完成更新，但无法自动重新打开"
+                : "\(name) 已完成更新，但无法自动重新打开；安装包未能移到废纸篓"
+            didDownload = true
+        } catch let error as DownloadedAppInstallerError {
+            errorMessage = "更新失败：\(error.localizedDescription)"
         } catch {
-            errorMessage = "下载失败：\(error.localizedDescription)"
+            let message = "下载失败：\(error.localizedDescription)"
+            if let websiteURL = manualDownloadPage(for: app) {
+                downloadFailurePrompt = DownloadFailurePrompt(
+                    appName: app.name,
+                    message: message,
+                    websiteURL: websiteURL
+                )
+            } else {
+                errorMessage = message
+            }
         }
 
         updateProgressText = nil
@@ -599,7 +757,36 @@ final class AppListViewModel: ObservableObject {
         return didDownload
     }
 
-    private func updateHomebrewCask(token: String, refreshAfterUpdate: Bool) async -> Bool {
+    private func manualDownloadPage(for app: AppRecord) -> URL? {
+        if let recipe = try? recipeValidationService.matchingRecipe(for: app),
+           let updatePageURL = recipe.updatePageURL {
+            return updatePageURL
+        }
+
+        if let source = try? selfUpdateSourceStore.record(for: app) {
+            return source.updateURL
+        }
+
+        guard let updateURL = app.updateURL,
+              let scheme = updateURL.scheme,
+              let host = updateURL.host(percentEncoded: false) else {
+            return nil
+        }
+
+        let pathComponents = updateURL.pathComponents.filter { $0 != "/" }
+        if host.localizedCaseInsensitiveCompare("github.com") == .orderedSame,
+           pathComponents.count >= 2 {
+            return URL(string: "\(scheme)://\(host)/\(pathComponents[0])/\(pathComponents[1])/releases/latest")
+        }
+
+        return URL(string: "\(scheme)://\(host)")
+    }
+
+    private func updateHomebrewCask(
+        app: AppRecord,
+        token: String,
+        refreshAfterUpdate: Bool
+    ) async -> Bool {
         isUpdatingApp = true
         updateProgressText = "正在通过 Homebrew 更新 \(token)..."
         errorMessage = nil
@@ -612,21 +799,64 @@ final class AppListViewModel: ObservableObject {
             }.value
             didUpdate = true
             if refreshAfterUpdate {
-                updateProgressText = "正在刷新更新状态..."
-                await checkUpdates()
+                await refreshHomebrewUpdateStatuses(preferredApp: app)
             }
         } catch CommandError.executableNotFound("brew") {
             errorMessage = "Homebrew 不可用"
-        } catch CommandError.failed(_, let stderr) {
-            let message = stderr.trimmingCharacters(in: .whitespacesAndNewlines)
-            errorMessage = message.isEmpty ? "Homebrew 更新失败" : message
         } catch {
-            errorMessage = error.localizedDescription
+            errorMessage = HomebrewErrorFormatter.userFacingMessage(from: error)
         }
 
         updateProgressText = nil
         isUpdatingApp = false
         return didUpdate
+    }
+
+    private func refreshHomebrewUpdateStatuses(preferredApp: AppRecord? = nil) async {
+        updateProgressText = "正在刷新 Homebrew App 状态..."
+
+        do {
+            let checker = makeUpdateChecker()
+            let appBundleReader = self.appBundleReader
+            let appCache = self.appCache
+            let currentApps = apps
+            let homebrewApps = currentApps.filter { app in
+                if case .homebrewCask = app.installSource {
+                    return app.updateStatus != .ignored
+                }
+                return false
+            }
+            guard !homebrewApps.isEmpty else {
+                return
+            }
+
+            let checkedApps = try await Task.detached(priority: .userInitiated) {
+                let refreshedApps = homebrewApps.map { app in
+                    (try? appBundleReader.refreshMetadata(for: app)) ?? app
+                }
+                return try checker.checkUpdates(for: refreshedApps)
+            }.value
+
+            let checkedByPath = Dictionary(checkedApps.map { ($0.path, $0) }) { _, latest in latest }
+            apps = currentApps.map { existingApp in
+                guard case .homebrewCask = existingApp.installSource,
+                      let checkedApp = checkedByPath[existingApp.path] else {
+                    return existingApp
+                }
+                return Self.preservingLastSuccessfulUpdateIfNeeded(
+                    previous: existingApp,
+                    checked: checkedApp
+                )
+            }
+            try appCache.save(apps)
+
+            if let preferredApp,
+               apps.contains(where: { $0.path == preferredApp.path }) {
+                statusMessage = "\(preferredApp.name) 已更新"
+            }
+        } catch {
+            errorMessage = error.localizedDescription
+        }
     }
 
     nonisolated private static func markIgnored(_ apps: [AppRecord], ignoredApps: [IgnoredAppRecord]) -> [AppRecord] {
@@ -646,7 +876,9 @@ final class AppListViewModel: ObservableObject {
         _ apps: [AppRecord],
         fileManager: FileManager
     ) -> [AppRecord] {
-        apps.filter { fileManager.fileExists(atPath: $0.path.path) }
+        AppScanner.deduplicated(
+            apps.filter { fileManager.fileExists(atPath: $0.path.path) }
+        )
     }
 
     nonisolated private static func preservingLastSuccessfulUpdateIfNeeded(
@@ -674,6 +906,21 @@ final class AppListViewModel: ObservableObject {
 
     nonisolated private static func isPackageURL(_ url: URL) -> Bool {
         ["dmg", "pkg", "zip"].contains(url.pathExtension.lowercased())
+    }
+
+    nonisolated private static func canAutomaticallyInstall(_ url: URL) -> Bool {
+        ["dmg", "zip"].contains(url.pathExtension.lowercased())
+    }
+
+    private func refreshInstalledApp(_ app: AppRecord) throws {
+        guard let index = apps.firstIndex(where: { $0.id == app.id && $0.path == app.path }) else {
+            return
+        }
+
+        var refreshedApp = try appBundleReader.refreshMetadata(for: app)
+        refreshedApp.updateStatus = .upToDate
+        apps[index] = refreshedApp
+        try appCache.save(apps)
     }
 
     nonisolated private static func isCancellation(_ error: Error) -> Bool {
@@ -775,21 +1022,513 @@ private func streamDownloadData(
     from url: URL,
     reportProgress: @escaping @MainActor (DownloadProgress) async -> Void
 ) async throws -> Data {
-    let (bytes, response) = try await URLSession.shared.bytes(from: url)
-    let totalBytes = (response.expectedContentLength > 0) ? response.expectedContentLength : nil
-    var data = Data()
-    var bytesReceived: Int64 = 0
+    do {
+        if let totalBytes = try await rangeDownloadSize(for: url) {
+            do {
+                return try await multipartDownloadData(
+                    from: url,
+                    totalBytes: totalBytes,
+                    partCount: 5,
+                    reportProgress: reportProgress
+                )
+            } catch where isDownloadCancellation(error) {
+                throw error
+            } catch {
+                await reportProgress(DownloadProgress(bytesReceived: 0, totalBytes: totalBytes))
+            }
+        }
+    } catch where isDownloadCancellation(error) {
+        throw error
+    } catch {
+        // HEAD 探测失败时直接使用兼容性更好的单线程下载。
+    }
 
-    for try await byte in bytes {
-        try Task.checkCancellation()
-        data.append(byte)
-        bytesReceived += 1
+    return try await singleDownloadData(from: url, reportProgress: reportProgress)
+}
 
-        if bytesReceived == 1 || bytesReceived % 262_144 == 0 || bytesReceived == totalBytes {
-            await reportProgress(DownloadProgress(bytesReceived: bytesReceived, totalBytes: totalBytes))
+struct DownloadByteRange: Equatable, Sendable {
+    let lowerBound: Int64
+    let upperBound: Int64
+
+    var length: Int64 {
+        upperBound - lowerBound + 1
+    }
+
+    var headerValue: String {
+        "bytes=\(lowerBound)-\(upperBound)"
+    }
+}
+
+func multipartByteRanges(totalBytes: Int64, partCount: Int) -> [DownloadByteRange] {
+    guard totalBytes > 0, partCount > 0 else {
+        return []
+    }
+
+    let actualPartCount = min(Int64(partCount), totalBytes)
+    return (0..<actualPartCount).map { index in
+        let lowerBound = totalBytes * index / actualPartCount
+        let upperBound = totalBytes * (index + 1) / actualPartCount - 1
+        return DownloadByteRange(lowerBound: lowerBound, upperBound: upperBound)
+    }
+}
+
+private func rangeDownloadSize(for url: URL) async throws -> Int64? {
+    var request = URLRequest(url: url)
+    request.httpMethod = "HEAD"
+    request.timeoutInterval = 20
+    let (_, response) = try await URLSession.shared.data(for: request)
+    guard let httpResponse = response as? HTTPURLResponse,
+          (200...299).contains(httpResponse.statusCode),
+          httpResponse.value(forHTTPHeaderField: "Accept-Ranges")?.lowercased().contains("bytes") == true,
+          response.expectedContentLength > 0 else {
+        return nil
+    }
+    return response.expectedContentLength
+}
+
+private func multipartDownloadData(
+    from url: URL,
+    totalBytes: Int64,
+    partCount: Int,
+    reportProgress: @escaping @MainActor (DownloadProgress) async -> Void
+) async throws -> Data {
+    guard totalBytes <= Int64(Int.max) else {
+        throw MultipartDownloadError.fileTooLarge
+    }
+
+    let ranges = multipartByteRanges(totalBytes: totalBytes, partCount: partCount)
+    guard ranges.count > 1 else {
+        return try await singleDownloadData(from: url, reportProgress: reportProgress)
+    }
+
+    let progress = MultipartDownloadProgress(totalBytes: totalBytes, reportProgress: reportProgress)
+    let buffer = NSMutableData(length: Int(totalBytes))!
+
+    do {
+        try await withThrowingTaskGroup(of: Void.self) { group in
+            for range in ranges {
+                group.addTask {
+                    var request = URLRequest(url: url)
+                    request.setValue(range.headerValue, forHTTPHeaderField: "Range")
+                    let receiver = MultipartPartReceiver(
+                        range: range,
+                        buffer: buffer,
+                        progress: progress
+                    )
+                    let response = try await collectDownloadData(
+                        request: request,
+                        collectsData: false,
+                        validateResponse: { response in
+                            try validateRangeResponseHeader(
+                                response,
+                                expectedRange: range,
+                                totalBytes: totalBytes
+                            )
+                        }
+                    ) { chunk in
+                        receiver.receive(chunk)
+                    }
+                    try validateRangeResponseBody(response, expectedRange: range)
+                    try receiver.validateCompletedLength()
+                }
+            }
+
+            try await group.waitForAll()
+        }
+    } catch {
+        progress.stop()
+        throw error
+    }
+
+    progress.stop()
+    await reportProgress(DownloadProgress(bytesReceived: totalBytes, totalBytes: totalBytes))
+    return Data(referencing: buffer)
+}
+
+private func singleDownloadData(
+    from url: URL,
+    reportProgress: @escaping @MainActor (DownloadProgress) async -> Void
+) async throws -> Data {
+    let progress = SingleDownloadProgress(reportProgress: reportProgress)
+    let response = try await collectDownloadData(request: URLRequest(url: url)) { chunk in
+        progress.add(Int64(chunk.count))
+    } onResponse: { totalBytes in
+        progress.setTotalBytes(totalBytes)
+    }
+    progress.stop()
+    await reportProgress(DownloadProgress(
+        bytesReceived: Int64(response.data.count),
+        totalBytes: response.response.expectedContentLength > 0
+            ? response.response.expectedContentLength
+            : nil
+    ))
+    return response.data
+}
+
+private struct CollectedDownloadData: Sendable {
+    let data: Data
+    let response: URLResponse
+    let bytesReceived: Int64
+}
+
+private func collectDownloadData(
+    request: URLRequest,
+    collectsData: Bool = true,
+    validateResponse: @escaping @Sendable (URLResponse) throws -> Void = { _ in },
+    onData: @escaping @Sendable (Data) -> Void,
+    onResponse: @escaping @Sendable (Int64?) -> Void = { _ in }
+) async throws -> CollectedDownloadData {
+    let download = StreamingDataDownload(
+        collectsData: collectsData,
+        validateResponse: validateResponse,
+        onData: onData,
+        onResponse: onResponse
+    )
+    return try await withTaskCancellationHandler {
+        try await download.start(request: request)
+    } onCancel: {
+        download.cancel()
+    }
+}
+
+private func validateRangeResponseHeader(
+    _ response: URLResponse,
+    expectedRange: DownloadByteRange,
+    totalBytes: Int64
+) throws {
+    guard let httpResponse = response as? HTTPURLResponse,
+          httpResponse.statusCode == 206 else {
+        throw MultipartDownloadError.rangeNotSupported
+    }
+
+    let expectedContentRange = "bytes \(expectedRange.lowerBound)-\(expectedRange.upperBound)/\(totalBytes)"
+    guard httpResponse.value(forHTTPHeaderField: "Content-Range")?.lowercased() == expectedContentRange else {
+        throw MultipartDownloadError.incorrectContentRange
+    }
+}
+
+private func validateRangeResponseBody(
+    _ response: CollectedDownloadData,
+    expectedRange: DownloadByteRange
+) throws {
+    guard response.bytesReceived == expectedRange.length else {
+        throw MultipartDownloadError.incorrectPartLength
+    }
+}
+
+private final class StreamingDataDownload: NSObject, URLSessionDataDelegate, @unchecked Sendable {
+    private let collectsData: Bool
+    private let validateResponse: @Sendable (URLResponse) throws -> Void
+    private let onData: @Sendable (Data) -> Void
+    private let onResponse: @Sendable (Int64?) -> Void
+    private let lock = NSLock()
+    private var continuation: CheckedContinuation<CollectedDownloadData, Error>?
+    private var session: URLSession?
+    private var task: URLSessionDataTask?
+    private var data = Data()
+    private var bytesReceived: Int64 = 0
+    private var response: URLResponse?
+    private var responseError: Error?
+    private var isCancelled = false
+
+    init(
+        collectsData: Bool,
+        validateResponse: @escaping @Sendable (URLResponse) throws -> Void,
+        onData: @escaping @Sendable (Data) -> Void,
+        onResponse: @escaping @Sendable (Int64?) -> Void
+    ) {
+        self.collectsData = collectsData
+        self.validateResponse = validateResponse
+        self.onData = onData
+        self.onResponse = onResponse
+    }
+
+    func start(request: URLRequest) async throws -> CollectedDownloadData {
+        try await withCheckedThrowingContinuation { continuation in
+            let delegateQueue = OperationQueue()
+            delegateQueue.maxConcurrentOperationCount = 1
+            let session = URLSession(configuration: .default, delegate: self, delegateQueue: delegateQueue)
+            let task = session.dataTask(with: request)
+
+            lock.lock()
+            self.continuation = continuation
+            self.session = session
+            self.task = task
+            let shouldCancel = isCancelled
+            lock.unlock()
+
+            if shouldCancel {
+                task.cancel()
+            } else {
+                task.resume()
+            }
         }
     }
 
-    await reportProgress(DownloadProgress(bytesReceived: bytesReceived, totalBytes: totalBytes))
-    return data
+    func cancel() {
+        lock.lock()
+        isCancelled = true
+        let task = self.task
+        lock.unlock()
+        task?.cancel()
+    }
+
+    func urlSession(
+        _ session: URLSession,
+        dataTask: URLSessionDataTask,
+        didReceive response: URLResponse,
+        completionHandler: @escaping (URLSession.ResponseDisposition) -> Void
+    ) {
+        do {
+            try validateResponse(response)
+        } catch {
+            lock.lock()
+            responseError = error
+            lock.unlock()
+            completionHandler(.cancel)
+            return
+        }
+
+        lock.lock()
+        self.response = response
+        lock.unlock()
+        onResponse(response.expectedContentLength > 0 ? response.expectedContentLength : nil)
+        completionHandler(.allow)
+    }
+
+    func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive chunk: Data) {
+        lock.lock()
+        if collectsData {
+            data.append(chunk)
+        }
+        bytesReceived += Int64(chunk.count)
+        lock.unlock()
+        onData(chunk)
+    }
+
+    func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
+        lock.lock()
+        let continuation = self.continuation
+        self.continuation = nil
+        self.task = nil
+        self.session = nil
+        let resultData = data
+        let response = self.response
+        let responseError = self.responseError
+        let bytesReceived = self.bytesReceived
+        lock.unlock()
+
+        session.finishTasksAndInvalidate()
+        if let responseError {
+            continuation?.resume(throwing: responseError)
+            return
+        }
+        if let error {
+            continuation?.resume(throwing: error)
+            return
+        }
+        guard let response else {
+            continuation?.resume(throwing: MultipartDownloadError.missingResponse)
+            return
+        }
+        continuation?.resume(returning: CollectedDownloadData(
+            data: resultData,
+            response: response,
+            bytesReceived: bytesReceived
+        ))
+    }
+}
+
+private final class MultipartPartReceiver: @unchecked Sendable {
+    private let range: DownloadByteRange
+    private let buffer: NSMutableData
+    private let progress: MultipartDownloadProgress
+    private let lock = NSLock()
+    private var bytesReceived: Int64 = 0
+
+    init(
+        range: DownloadByteRange,
+        buffer: NSMutableData,
+        progress: MultipartDownloadProgress
+    ) {
+        self.range = range
+        self.buffer = buffer
+        self.progress = progress
+    }
+
+    func receive(_ chunk: Data) {
+        lock.lock()
+        guard bytesReceived + Int64(chunk.count) <= range.length else {
+            bytesReceived += Int64(chunk.count)
+            lock.unlock()
+            return
+        }
+        let writeOffset = range.lowerBound + bytesReceived
+        bytesReceived += Int64(chunk.count)
+        lock.unlock()
+
+        chunk.withUnsafeBytes { bytes in
+            guard let baseAddress = bytes.baseAddress else {
+                return
+            }
+            objc_sync_enter(buffer)
+            buffer.replaceBytes(
+                in: NSRange(location: Int(writeOffset), length: chunk.count),
+                withBytes: baseAddress
+            )
+            objc_sync_exit(buffer)
+        }
+        progress.add(Int64(chunk.count))
+    }
+
+    func validateCompletedLength() throws {
+        lock.lock()
+        let completedBytes = bytesReceived
+        lock.unlock()
+        guard completedBytes == range.length else {
+            throw MultipartDownloadError.incorrectPartLength
+        }
+    }
+}
+
+private final class MultipartDownloadProgress: @unchecked Sendable {
+    private let totalBytes: Int64
+    private let reportProgress: @MainActor (DownloadProgress) async -> Void
+    private let lock = NSLock()
+    private var bytesReceived: Int64 = 0
+    private var lastReportedBytes: Int64 = 0
+    private var isActive = true
+
+    init(
+        totalBytes: Int64,
+        reportProgress: @escaping @MainActor (DownloadProgress) async -> Void
+    ) {
+        self.totalBytes = totalBytes
+        self.reportProgress = reportProgress
+    }
+
+    func add(_ count: Int64) {
+        lock.lock()
+        guard isActive else {
+            lock.unlock()
+            return
+        }
+        bytesReceived += count
+        let progress = DownloadProgress(bytesReceived: bytesReceived, totalBytes: totalBytes)
+        let shouldReport = lastReportedBytes == 0
+            || bytesReceived - lastReportedBytes >= 262_144
+            || bytesReceived == totalBytes
+        if shouldReport {
+            lastReportedBytes = bytesReceived
+        }
+        lock.unlock()
+
+        if shouldReport {
+            Task { @MainActor [weak self] in
+                guard let self, self.active else {
+                    return
+                }
+                await self.reportProgress(progress)
+            }
+        }
+    }
+
+    func stop() {
+        lock.lock()
+        isActive = false
+        lock.unlock()
+    }
+
+    private var active: Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return isActive
+    }
+}
+
+private final class SingleDownloadProgress: @unchecked Sendable {
+    private let reportProgress: @MainActor (DownloadProgress) async -> Void
+    private let lock = NSLock()
+    private var bytesReceived: Int64 = 0
+    private var totalBytes: Int64?
+    private var lastReportedBytes: Int64 = 0
+    private var isActive = true
+
+    init(reportProgress: @escaping @MainActor (DownloadProgress) async -> Void) {
+        self.reportProgress = reportProgress
+    }
+
+    func setTotalBytes(_ totalBytes: Int64?) {
+        lock.lock()
+        self.totalBytes = totalBytes
+        lock.unlock()
+    }
+
+    func add(_ count: Int64) {
+        lock.lock()
+        guard isActive else {
+            lock.unlock()
+            return
+        }
+        bytesReceived += count
+        let progress = DownloadProgress(bytesReceived: bytesReceived, totalBytes: totalBytes)
+        let shouldReport = lastReportedBytes == 0
+            || bytesReceived - lastReportedBytes >= 262_144
+            || bytesReceived == totalBytes
+        if shouldReport {
+            lastReportedBytes = bytesReceived
+        }
+        lock.unlock()
+
+        if shouldReport {
+            Task { @MainActor [weak self] in
+                guard let self, self.active else {
+                    return
+                }
+                await self.reportProgress(progress)
+            }
+        }
+    }
+
+    func stop() {
+        lock.lock()
+        isActive = false
+        lock.unlock()
+    }
+
+    private var active: Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return isActive
+    }
+}
+
+private enum MultipartDownloadError: LocalizedError {
+    case fileTooLarge
+    case missingResponse
+    case rangeNotSupported
+    case incorrectPartLength
+    case incorrectContentRange
+
+    var errorDescription: String? {
+        switch self {
+        case .fileTooLarge:
+            return "文件过大"
+        case .missingResponse:
+            return "没有收到下载响应"
+        case .rangeNotSupported:
+            return "服务器不支持分块下载"
+        case .incorrectPartLength:
+            return "分块长度不正确"
+        case .incorrectContentRange:
+            return "分块范围响应不正确"
+        }
+    }
+}
+
+private func isDownloadCancellation(_ error: Error) -> Bool {
+    if error is CancellationError {
+        return true
+    }
+    return (error as? URLError)?.code == .cancelled
 }

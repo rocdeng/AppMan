@@ -28,6 +28,7 @@ public enum UninstallCandidateKind: String, Equatable, Sendable {
     case application
     case applicationSupport
     case cache
+    case httpStorage
     case preferences
     case applicationScript
     case container
@@ -45,6 +46,8 @@ public enum UninstallCandidateKind: String, Equatable, Sendable {
             return "应用数据"
         case .cache:
             return "缓存"
+        case .httpStorage:
+            return "网络数据"
         case .preferences:
             return "配置"
         case .applicationScript:
@@ -84,6 +87,7 @@ public struct UninstallCandidateFinder: Sendable {
     public func findCandidates(for app: AppRecord) throws -> [UninstallCandidate] {
         let names = searchNames(for: app)
         let bundleIdentifier = app.bundleIdentifier?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let bundleIdentifiers = relatedBundleIdentifiers(for: app.path, mainBundleIdentifier: bundleIdentifier)
         var candidates: [UninstallCandidate] = []
         var seenPaths = Set<String>()
 
@@ -98,19 +102,26 @@ public struct UninstallCandidateFinder: Sendable {
 
         appendMatchingChildren(
             in: libraryDirectory.appendingPathComponent("Application Support", isDirectory: true),
-            matching: names + [bundleIdentifier].compactMap { $0 },
+            matching: names + bundleIdentifiers,
             kind: .applicationSupport,
             candidates: &candidates,
             seenPaths: &seenPaths
         )
         appendMatchingChildren(
             in: libraryDirectory.appendingPathComponent("Caches", isDirectory: true),
-            matching: names + [bundleIdentifier].compactMap { $0 },
+            matching: names + bundleIdentifiers,
             kind: .cache,
             candidates: &candidates,
             seenPaths: &seenPaths
         )
-        if let bundleIdentifier, !bundleIdentifier.isEmpty {
+        appendMatchingChildren(
+            in: libraryDirectory.appendingPathComponent("HTTPStorages", isDirectory: true),
+            matching: names + bundleIdentifiers,
+            kind: .httpStorage,
+            candidates: &candidates,
+            seenPaths: &seenPaths
+        )
+        for bundleIdentifier in bundleIdentifiers {
             appendCandidate(
                 at: libraryDirectory.appendingPathComponent("Application Scripts/\(bundleIdentifier)", isDirectory: true),
                 name: bundleIdentifier,
@@ -121,36 +132,34 @@ public struct UninstallCandidateFinder: Sendable {
         }
         appendMatchingChildren(
             in: libraryDirectory.appendingPathComponent("Containers", isDirectory: true),
-            matching: names + [bundleIdentifier].compactMap { $0 },
+            matching: names + bundleIdentifiers,
             kind: .container,
             candidates: &candidates,
             seenPaths: &seenPaths
         )
-        if let bundleIdentifier, !bundleIdentifier.isEmpty {
-            appendMatchingChildren(
-                in: libraryDirectory.appendingPathComponent("Group Containers", isDirectory: true),
-                matching: [bundleIdentifier],
-                kind: .groupContainer,
-                candidates: &candidates,
-                seenPaths: &seenPaths
-            )
-        }
+        appendMatchingChildren(
+            in: libraryDirectory.appendingPathComponent("Group Containers", isDirectory: true),
+            matching: bundleIdentifiers,
+            kind: .groupContainer,
+            candidates: &candidates,
+            seenPaths: &seenPaths
+        )
         appendMatchingChildren(
             in: libraryDirectory.appendingPathComponent("Logs", isDirectory: true),
-            matching: names + [bundleIdentifier].compactMap { $0 },
+            matching: names + bundleIdentifiers,
             kind: .log,
             candidates: &candidates,
             seenPaths: &seenPaths
         )
 
-        if let bundleIdentifier, !bundleIdentifier.isEmpty {
-            appendCandidate(
-                at: libraryDirectory.appendingPathComponent("Preferences/\(bundleIdentifier).plist"),
-                name: "\(bundleIdentifier).plist",
-                kind: .preferences,
-                candidates: &candidates,
-                seenPaths: &seenPaths
-            )
+        appendMatchingChildren(
+            in: libraryDirectory.appendingPathComponent("Preferences", isDirectory: true),
+            matching: names + bundleIdentifiers,
+            kind: .preferences,
+            candidates: &candidates,
+            seenPaths: &seenPaths
+        )
+        for bundleIdentifier in bundleIdentifiers {
             appendCandidate(
                 at: libraryDirectory.appendingPathComponent("Saved Application State/\(bundleIdentifier).savedState", isDirectory: true),
                 name: "\(bundleIdentifier).savedState",
@@ -163,7 +172,7 @@ public struct UninstallCandidateFinder: Sendable {
         if let downloadsDirectory {
             appendInstallers(
                 in: downloadsDirectory,
-                matching: names + [bundleIdentifier].compactMap { $0 },
+                matching: names + bundleIdentifiers,
                 candidates: &candidates,
                 seenPaths: &seenPaths
             )
@@ -176,6 +185,36 @@ public struct UninstallCandidateFinder: Sendable {
         var values = [app.name]
         values.append(app.path.deletingPathExtension().lastPathComponent)
         return Array(Set(values.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }))
+    }
+
+    private func relatedBundleIdentifiers(
+        for appURL: URL,
+        mainBundleIdentifier: String?
+    ) -> [String] {
+        var identifiers = Set<String>()
+        if let mainBundleIdentifier, !mainBundleIdentifier.isEmpty {
+            identifiers.insert(mainBundleIdentifier)
+        }
+
+        guard let enumerator = FileManager.default.enumerator(
+            at: appURL,
+            includingPropertiesForKeys: nil,
+            options: [.skipsHiddenFiles]
+        ) else {
+            return identifiers.sorted()
+        }
+
+        for case let url as URL in enumerator {
+            let pathExtension = url.pathExtension.localizedLowercase
+            guard pathExtension == "app" || pathExtension == "appex",
+                  let bundleIdentifier = Bundle(url: url)?.bundleIdentifier,
+                  !bundleIdentifier.isEmpty else {
+                continue
+            }
+            identifiers.insert(bundleIdentifier)
+        }
+
+        return identifiers.sorted()
     }
 
     private func appendMatchingChildren(
@@ -266,10 +305,28 @@ public struct UninstallCandidateFinder: Sendable {
         let normalizedValue = value.localizedLowercase
         return names.contains { name in
             let normalizedName = name.localizedLowercase
+            let nameComponents = normalizedName
+                .split { !$0.isLetter && !$0.isNumber }
+                .map(String.init)
             return normalizedValue == normalizedName
-                || normalizedValue.contains(normalizedName)
-                || normalizedName.contains(normalizedValue)
+                || containsNameWithBoundaries(normalizedName, in: normalizedValue)
+                || (normalizedValue.count >= 4 && nameComponents.contains(normalizedValue))
         }
+    }
+
+    private func containsNameWithBoundaries(_ name: String, in value: String) -> Bool {
+        guard !name.isEmpty, let range = value.range(of: name) else {
+            return false
+        }
+
+        let characterBefore = range.lowerBound > value.startIndex
+            ? value[value.index(before: range.lowerBound)]
+            : nil
+        let characterAfter = range.upperBound < value.endIndex
+            ? value[range.upperBound]
+            : nil
+        return characterBefore.map { !$0.isLetter && !$0.isNumber } ?? true
+            && characterAfter.map { !$0.isLetter && !$0.isNumber } ?? true
     }
 
     private func sizeOfItem(at url: URL) -> Int64 {

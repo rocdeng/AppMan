@@ -3,6 +3,30 @@ import XCTest
 import AppManCore
 
 final class AppListViewModelTests: XCTestCase {
+    func testMultipartByteRangesSplitFileIntoFiveContinuousParts() {
+        XCTAssertEqual(
+            multipartByteRanges(totalBytes: 13, partCount: 5),
+            [
+                DownloadByteRange(lowerBound: 0, upperBound: 1),
+                DownloadByteRange(lowerBound: 2, upperBound: 4),
+                DownloadByteRange(lowerBound: 5, upperBound: 6),
+                DownloadByteRange(lowerBound: 7, upperBound: 9),
+                DownloadByteRange(lowerBound: 10, upperBound: 12),
+            ]
+        )
+    }
+
+    func testMultipartByteRangesDoNotCreateEmptyParts() {
+        XCTAssertEqual(
+            multipartByteRanges(totalBytes: 3, partCount: 5),
+            [
+                DownloadByteRange(lowerBound: 0, upperBound: 0),
+                DownloadByteRange(lowerBound: 1, upperBound: 1),
+                DownloadByteRange(lowerBound: 2, upperBound: 2),
+            ]
+        )
+    }
+
     @MainActor
     func testCheckAllUpdatesShowsCompletedProgress() async {
         let apps = [
@@ -98,6 +122,33 @@ final class AppListViewModelTests: XCTestCase {
 
         XCTAssertEqual(viewModel.apps.map(\.path), [existingAppURL])
         XCTAssertEqual(try cache.load().map(\.path), [existingAppURL])
+    }
+
+    @MainActor
+    func testLaunchDropsCachedAppsWithDuplicateBundleIdentifier() throws {
+        let firstAppURL = temporaryAppBundleURL(name: "First")
+        let secondAppURL = temporaryAppBundleURL(name: "Second")
+        defer {
+            try? FileManager.default.removeItem(at: firstAppURL.deletingLastPathComponent())
+            try? FileManager.default.removeItem(at: secondAppURL.deletingLastPathComponent())
+        }
+        try FileManager.default.createDirectory(
+            at: firstAppURL.appendingPathComponent("Contents", isDirectory: true),
+            withIntermediateDirectories: true
+        )
+        try FileManager.default.createDirectory(
+            at: secondAppURL.appendingPathComponent("Contents", isDirectory: true),
+            withIntermediateDirectories: true
+        )
+        let firstApp = makeManualApp(id: "duplicate", path: firstAppURL)
+        let secondApp = makeManualApp(id: "duplicate", path: secondAppURL)
+        let cache = AppRecordCache(cacheURL: temporaryCacheURL(), fileManager: .default)
+        try cache.save([firstApp, secondApp])
+
+        let viewModel = AppListViewModel(appCache: cache)
+
+        XCTAssertEqual(viewModel.apps.map(\.path), [firstAppURL])
+        XCTAssertEqual(try cache.load().map(\.path), [firstAppURL])
     }
 
     @MainActor
@@ -395,6 +446,7 @@ final class AppListViewModelTests: XCTestCase {
         var revealedURL: URL?
         var openedPackageURL: URL?
         let viewModel = AppListViewModel(
+            downloadedAppInstaller: StubDownloadedAppInstaller(result: .requiresManualInstallation),
             fileManager: FileManager.default,
             downloadsDirectory: temporaryDirectory,
             downloadData: { _, _ in
@@ -405,6 +457,10 @@ final class AppListViewModelTests: XCTestCase {
             },
             openDownloadedPackage: { url in
                 openedPackageURL = url
+            },
+            recycleItems: { _ in
+                XCTFail("Packages requiring manual installation must be kept")
+                return []
             }
         )
 
@@ -419,6 +475,100 @@ final class AppListViewModelTests: XCTestCase {
         XCTAssertEqual(openedPackageURL, expectedPackageURL)
         XCTAssertTrue(FileManager.default.fileExists(atPath: expectedPackageURL.path))
         XCTAssertNil(viewModel.updateProgressText)
+    }
+
+    @MainActor
+    func testDownloadUpdateAutomaticallyInstallsAppFromArchive() async throws {
+        let temporaryDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let appURL = temporaryDirectory.appendingPathComponent("Applications/Direct.app", isDirectory: true)
+        try makeTestAppBundle(at: appURL, version: "1.0")
+        defer { try? FileManager.default.removeItem(at: temporaryDirectory) }
+        var app = makeManualApp(id: "direct", path: appURL)
+        app.updateStatus = .updateAvailable(installedVersion: "1.0", latestVersion: "2.0")
+        app.updateURL = URL(string: "https://example.com/Direct.zip")!
+        app.updateURLIsDirectDownload = true
+        let installer = StubDownloadedAppInstaller(result: .installed(appURL)) { _, _ in
+            try makeTestAppBundle(at: appURL, version: "2.0", replaceExisting: true)
+        }
+        let cache = AppRecordCache(cacheURL: temporaryCacheURL(), fileManager: .default)
+        var recycledURLs: [URL] = []
+        let viewModel = AppListViewModel(
+            appCache: cache,
+            downloadedAppInstaller: installer,
+            fileManager: .default,
+            downloadsDirectory: temporaryDirectory,
+            downloadData: { _, _ in Data("archive".utf8) },
+            openDownloadedPackage: { _ in
+                XCTFail("Archive containing an App should be installed automatically")
+            },
+            recycleItems: { urls in
+                recycledURLs = urls
+                return []
+            }
+        )
+        viewModel.replaceAppsForTesting([app])
+
+        await viewModel.update(app) { _ in
+            XCTFail("Direct download should not open the update URL")
+        }
+
+        XCTAssertEqual(viewModel.apps.first?.shortVersion, "2.0")
+        XCTAssertEqual(viewModel.apps.first?.updateStatus, .upToDate)
+        XCTAssertEqual(viewModel.statusMessage, "direct 已更新")
+        XCTAssertEqual(try cache.load().first?.shortVersion, "2.0")
+        XCTAssertEqual(
+            recycledURLs,
+            [
+                temporaryDirectory
+                    .appendingPathComponent("AppMan", isDirectory: true)
+                    .appendingPathComponent("Direct.zip"),
+            ]
+        )
+    }
+
+    @MainActor
+    func testInstalledPackageIsRecycledWhenUpdatedAppCannotReopen() async throws {
+        let temporaryDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let appURL = temporaryDirectory.appendingPathComponent("Applications/Direct.app", isDirectory: true)
+        try makeTestAppBundle(at: appURL, version: "1.0")
+        defer { try? FileManager.default.removeItem(at: temporaryDirectory) }
+        var app = makeManualApp(id: "direct", path: appURL)
+        app.updateStatus = .updateAvailable(installedVersion: "1.0", latestVersion: "2.0")
+        app.updateURL = URL(string: "https://example.com/Direct.zip")!
+        app.updateURLIsDirectDownload = true
+        let installer = StubDownloadedAppInstaller(result: .installed(appURL)) { _, _ in
+            try makeTestAppBundle(at: appURL, version: "2.0", replaceExisting: true)
+            throw DownloadedAppInstallerError.unableToReopenApplication("direct")
+        }
+        var recycledURLs: [URL] = []
+        let viewModel = AppListViewModel(
+            downloadedAppInstaller: installer,
+            fileManager: .default,
+            downloadsDirectory: temporaryDirectory,
+            downloadData: { _, _ in Data("archive".utf8) },
+            recycleItems: { urls in
+                recycledURLs = urls
+                return []
+            }
+        )
+        viewModel.replaceAppsForTesting([app])
+
+        await viewModel.update(app) { _ in
+            XCTFail("Direct download should not open the update URL")
+        }
+
+        XCTAssertEqual(viewModel.apps.first?.shortVersion, "2.0")
+        XCTAssertEqual(viewModel.errorMessage, "direct 已完成更新，但无法自动重新打开")
+        XCTAssertEqual(
+            recycledURLs,
+            [
+                temporaryDirectory
+                    .appendingPathComponent("AppMan", isDirectory: true)
+                    .appendingPathComponent("Direct.zip"),
+            ]
+        )
     }
 
     @MainActor
@@ -473,6 +623,78 @@ final class AppListViewModelTests: XCTestCase {
     }
 
     @MainActor
+    func testDownloadFailureOffersRecipeWebsiteForManualDownload() async throws {
+        let app = AppRecord(
+            id: "com.colliderli.iina",
+            name: "IINA",
+            bundleIdentifier: "com.colliderli.iina",
+            shortVersion: "1.4.3",
+            buildVersion: nil,
+            path: URL(fileURLWithPath: "/Applications/IINA.app"),
+            sizeBytes: 1,
+            installSource: .manual(reason: "self"),
+            updateStatus: .updateAvailable(installedVersion: "1.4.3", latestVersion: "1.4.4"),
+            updateURL: URL(string: "https://dl-portal.iina.io/IINA.v1.4.4.dmg")!,
+            updateURLIsDirectDownload: true
+        )
+        let temporaryDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: temporaryDirectory) }
+        let viewModel = AppListViewModel(
+            fileManager: .default,
+            downloadsDirectory: temporaryDirectory,
+            downloadData: { _, _ in
+                throw URLError(.timedOut)
+            }
+        )
+
+        await viewModel.update(app) { _ in
+            XCTFail("Direct download should not open the update URL")
+        }
+
+        XCTAssertNil(viewModel.errorMessage)
+        XCTAssertEqual(viewModel.downloadFailurePrompt?.appName, "IINA")
+        XCTAssertEqual(viewModel.downloadFailurePrompt?.websiteURL, URL(string: "https://iina.io/"))
+        XCTAssertTrue(viewModel.downloadFailurePrompt?.message.hasPrefix("下载失败：") == true)
+    }
+
+    @MainActor
+    func testOpeningDownloadFailureWebsiteClearsPrompt() async throws {
+        let app = AppRecord(
+            id: "com.colliderli.iina",
+            name: "IINA",
+            bundleIdentifier: "com.colliderli.iina",
+            shortVersion: "1.4.3",
+            buildVersion: nil,
+            path: URL(fileURLWithPath: "/Applications/IINA.app"),
+            sizeBytes: 1,
+            installSource: .manual(reason: "self"),
+            updateStatus: .updateAvailable(installedVersion: "1.4.3", latestVersion: "1.4.4"),
+            updateURL: URL(string: "https://dl-portal.iina.io/IINA.v1.4.4.dmg")!,
+            updateURLIsDirectDownload: true
+        )
+        let temporaryDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: temporaryDirectory) }
+        let viewModel = AppListViewModel(
+            fileManager: .default,
+            downloadsDirectory: temporaryDirectory,
+            downloadData: { _, _ in
+                throw URLError(.cannotConnectToHost)
+            }
+        )
+        await viewModel.update(app) { _ in }
+        var openedURL: URL?
+
+        viewModel.openDownloadFailureWebsite { url in
+            openedURL = url
+        }
+
+        XCTAssertEqual(openedURL, URL(string: "https://iina.io/"))
+        XCTAssertNil(viewModel.downloadFailurePrompt)
+    }
+
+    @MainActor
     func testWebUpdateOpensURLWithoutDownloadProgressStep() async {
         let updateURL = URL(string: "https://example.com/download")!
         let app = AppRecord(
@@ -500,6 +722,32 @@ final class AppListViewModelTests: XCTestCase {
 
         XCTAssertEqual(openedURL, updateURL)
         XCTAssertNil(viewModel.updateProgressText)
+    }
+
+    @MainActor
+    func testHomebrewUpdateOnlyRefreshesHomebrewApps() async {
+        var brewApp = makeManualApp(id: "brew")
+        brewApp.installSource = .homebrewCask(token: "brew")
+        brewApp.updateStatus = .updateAvailable(installedVersion: "1.0", latestVersion: "2.0")
+        var manualApp = makeManualApp(id: "manual")
+        manualApp.updateStatus = .updateAvailable(installedVersion: "3.0", latestVersion: "4.0")
+        manualApp.updateURL = URL(string: "https://example.com/manual.zip")
+        manualApp.updateURLIsDirectDownload = true
+        let checker = HomebrewOnlyRecordingUpdateChecker()
+        let updater = HomebrewCaskUpdater(commandRunner: SuccessfulCommandRunner())
+        let viewModel = AppListViewModel(
+            updateChecker: checker,
+            appCache: AppRecordCache(cacheURL: temporaryCacheURL(), fileManager: .default),
+            homebrewUpdater: updater
+        )
+        viewModel.replaceAppsForTesting([brewApp, manualApp])
+
+        await viewModel.update(brewApp) { _ in }
+
+        XCTAssertEqual(checker.checkedAppIDs, [brewApp.id])
+        XCTAssertEqual(viewModel.apps[0].updateStatus, AppUpdateStatus.upToDate)
+        XCTAssertEqual(viewModel.apps[1], manualApp)
+        XCTAssertEqual(viewModel.statusMessage, "brew 已更新")
     }
 }
 
@@ -647,6 +895,34 @@ private struct FailingResultUpdateChecker: AppUpdateChecking {
     }
 }
 
+private final class HomebrewOnlyRecordingUpdateChecker: AppUpdateChecking, @unchecked Sendable {
+    private let lock = NSLock()
+    private var recordedAppIDs: [AppRecord.ID] = []
+
+    var checkedAppIDs: [AppRecord.ID] {
+        lock.lock()
+        defer { lock.unlock() }
+        return recordedAppIDs
+    }
+
+    func checkUpdates(for apps: [AppRecord]) throws -> [AppRecord] {
+        lock.lock()
+        recordedAppIDs.append(contentsOf: apps.map(\.id))
+        lock.unlock()
+        return apps.map { app in
+            var checkedApp = app
+            checkedApp.updateStatus = .upToDate
+            return checkedApp
+        }
+    }
+}
+
+private struct SuccessfulCommandRunner: CommandRunning {
+    func run(_ executable: String, arguments: [String]) throws -> String {
+        ""
+    }
+}
+
 private actor AsyncSignal {
     private var didSignal = false
     private var continuations: [CheckedContinuation<Void, Never>] = []
@@ -668,6 +944,48 @@ private actor AsyncSignal {
             continuations.append(continuation)
         }
     }
+}
+
+private struct StubDownloadedAppInstaller: DownloadedAppInstalling {
+    let result: DownloadedAppInstallResult
+    let beforeReturning: @Sendable (URL, AppRecord) throws -> Void
+
+    init(
+        result: DownloadedAppInstallResult,
+        beforeReturning: @escaping @Sendable (URL, AppRecord) throws -> Void = { _, _ in }
+    ) {
+        self.result = result
+        self.beforeReturning = beforeReturning
+    }
+
+    func install(
+        packageURL: URL,
+        replacing app: AppRecord,
+        progress: @escaping @Sendable (DownloadedAppInstallProgress) -> Void
+    ) throws -> DownloadedAppInstallResult {
+        try beforeReturning(packageURL, app)
+        return result
+    }
+}
+
+private func makeTestAppBundle(
+    at url: URL,
+    version: String,
+    replaceExisting: Bool = false
+) throws {
+    if replaceExisting, FileManager.default.fileExists(atPath: url.path) {
+        try FileManager.default.removeItem(at: url)
+    }
+    let contentsURL = url.appendingPathComponent("Contents", isDirectory: true)
+    try FileManager.default.createDirectory(at: contentsURL, withIntermediateDirectories: true)
+    let plist: [String: Any] = [
+        "CFBundleName": "direct",
+        "CFBundleIdentifier": "com.example.direct",
+        "CFBundleShortVersionString": version,
+        "CFBundleVersion": version,
+    ]
+    let data = try PropertyListSerialization.data(fromPropertyList: plist, format: .xml, options: 0)
+    try data.write(to: contentsURL.appendingPathComponent("Info.plist"))
 }
 
 private func makeManualApp(

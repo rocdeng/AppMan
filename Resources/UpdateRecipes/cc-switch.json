@@ -1,13 +1,27 @@
 {
   "id": "com.ccswitch.desktop",
   "name": "CC Switch",
-  "recipePrompt": "这个规则用于识别 CC Switch。官方站点是 ccswitch.io，目前没有稳定公开的 macOS 最新版本元数据入口；当前不自动抽取版本。",
+  "recipePrompt": "这个规则用于检测 CC Switch。官网 ccswitch.io 链接到官方 GitHub 仓库 farion1231/cc-switch；使用 GitHub latest release 的 tag_name 读取版本，并选择名称以 macOS.dmg 结尾的安装包。",
   "match": {
     "bundleIdentifier": "com.ccswitch.desktop",
     "appName": "CC Switch",
     "officialHost": "ccswitch.io"
   },
-  "checks": [],
-  "updatePageURL": "https://ccswitch.io/en/",
-  "download": null
+  "checks": [
+    {
+      "url": "https://api.github.com/repos/farion1231/cc-switch/releases/latest",
+      "extract": {
+        "type": "regex",
+        "pattern": "\"tag_name\"\\s*:\\s*\"v?([0-9]+(?:\\.[0-9A-Za-z]+){1,5})\"",
+        "versionGroup": 1
+      }
+    }
+  ],
+  "updatePageURL": "https://github.com/farion1231/cc-switch",
+  "download": {
+    "url": null,
+    "sourceURL": "https://api.github.com/repos/farion1231/cc-switch/releases/latest",
+    "pattern": "\"browser_download_url\"\\s*:\\s*\"([^\"]*macOS\\.dmg)\"",
+    "urlGroup": 1
+  }
 }

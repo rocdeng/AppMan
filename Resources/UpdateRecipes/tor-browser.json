@@ -1,7 +1,7 @@
 {
   "id": "org.torproject.torbrowser",
   "name": "Tor Browser",
-  "recipePrompt": "这个规则使用 Tor Project 官方更新 JSON。version 是稳定版版本，downloads.macos.ALL.binary 是 macOS DMG 直链。",
+  "recipePrompt": "这个规则使用 Tor Project 官方按平台更新 JSON download-macos.json。version 是稳定版版本，binary 是 macOS DMG 直链；不再使用已废弃的跨平台 downloads.json。",
   "match": {
     "bundleIdentifier": "org.torproject.torbrowser",
     "appName": "Tor Browser",
@@ -9,7 +9,7 @@
   },
   "checks": [
     {
-      "url": "https://aus1.torproject.org/torbrowser/update_3/release/downloads.json",
+      "url": "https://aus1.torproject.org/torbrowser/update_3/release/download-macos.json",
       "extract": {
         "type": "regex",
         "pattern": "\\\"version\\\"\\s*:\\s*\\\"([0-9]+(?:\\.[0-9A-Za-z]+){1,5})\\\"",
@@ -20,7 +20,7 @@
   "updatePageURL": "https://www.torproject.org/download/",
   "download": {
     "url": null,
-    "sourceURL": "https://aus1.torproject.org/torbrowser/update_3/release/downloads.json",
+    "sourceURL": "https://aus1.torproject.org/torbrowser/update_3/release/download-macos.json",
     "pattern": "\\\"binary\\\"\\s*:\\s*\\\"(https://dist\\.torproject\\.org/torbrowser/[^\\\"]+/tor-browser-macos-[^\\\"]+\\.dmg)\\\"",
     "urlGroup": 1
   }

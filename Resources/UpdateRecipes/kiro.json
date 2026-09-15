@@ -1,0 +1,27 @@
+{
+  "id": "dev.kiro.desktop",
+  "name": "Kiro",
+  "recipePrompt": "这个规则用于识别 Kiro macOS 桌面客户端。官方 kiro.dev/downloads/ 页面直接列出稳定版 darwin-arm64 和 darwin-x64 DMG，版本号同时出现在下载路径和文件名中。当前 AppMan 运行在 Apple Silicon 时只匹配 darwin-arm64，不能选 x64 安装包。",
+  "match": {
+    "bundleIdentifier": "dev.kiro.desktop",
+    "appName": "Kiro",
+    "officialHost": "kiro.dev"
+  },
+  "checks": [
+    {
+      "url": "https://kiro.dev/downloads/",
+      "extract": {
+        "type": "regex",
+        "pattern": "https://prod\\.download\\.desktop\\.kiro\\.dev/releases/stable/darwin-arm64/signed/([0-9]+(?:\\.[0-9]+){1,5})/kiro-ide-[^\\\"]+-stable-darwin-arm64\\.dmg",
+        "versionGroup": 1
+      }
+    }
+  ],
+  "updatePageURL": "https://kiro.dev/downloads/",
+  "download": {
+    "url": null,
+    "sourceURL": "https://kiro.dev/downloads/",
+    "pattern": "(https://prod\\.download\\.desktop\\.kiro\\.dev/releases/stable/darwin-arm64/signed/[0-9]+(?:\\.[0-9]+){1,5}/kiro-ide-[^\\\"]+-stable-darwin-arm64\\.dmg)",
+    "urlGroup": 1
+  }
+}

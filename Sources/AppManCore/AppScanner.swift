@@ -40,7 +40,7 @@ public struct AppScanner: @unchecked Sendable {
             }
         }
 
-        return records.sorted { left, right in
+        return Self.deduplicated(records).sorted { left, right in
             let nameOrder = left.name.localizedCaseInsensitiveCompare(right.name)
             if nameOrder != .orderedSame {
                 return nameOrder == .orderedAscending
@@ -55,6 +55,49 @@ public struct AppScanner: @unchecked Sendable {
 
             return left.path.path.localizedCaseInsensitiveCompare(right.path.path) == .orderedAscending
         }
+    }
+
+    public static func deduplicated(_ records: [AppRecord]) -> [AppRecord] {
+        var deduplicatedRecords: [AppRecord] = []
+        var indexByBundleIdentifier: [String: Int] = [:]
+
+        for record in records {
+            guard let bundleIdentifier = record.bundleIdentifier?
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .lowercased(),
+                  !bundleIdentifier.isEmpty else {
+                deduplicatedRecords.append(record)
+                continue
+            }
+
+            if let existingIndex = indexByBundleIdentifier[bundleIdentifier] {
+                if preferredLocationRank(for: record.path) < preferredLocationRank(for: deduplicatedRecords[existingIndex].path) {
+                    deduplicatedRecords[existingIndex] = record
+                }
+                continue
+            }
+
+            indexByBundleIdentifier[bundleIdentifier] = deduplicatedRecords.count
+            deduplicatedRecords.append(record)
+        }
+
+        return deduplicatedRecords
+    }
+
+    private static func preferredLocationRank(for url: URL) -> Int {
+        let path = url.standardizedFileURL.path
+        if path == "/Applications" || path.hasPrefix("/Applications/") {
+            return 0
+        }
+
+        let userApplicationsPath = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Applications", isDirectory: true)
+            .standardizedFileURL.path
+        if path == userApplicationsPath || path.hasPrefix(userApplicationsPath + "/") {
+            return 1
+        }
+
+        return 2
     }
 
     public static func defaultScanRoots() -> [URL] {

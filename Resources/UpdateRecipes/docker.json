@@ -1,0 +1,27 @@
+{
+  "id": "com.docker.docker",
+  "name": "Docker",
+  "recipePrompt": "这个规则用于检测 Docker Desktop。使用 Docker 官方 release notes Markdown 的首个版本标题，并从同一版本段中读取 Mac Apple chip 的官方 Docker.dmg 地址。",
+  "match": {
+    "bundleIdentifier": "com.docker.docker",
+    "appName": "Docker",
+    "officialHost": "docker.com"
+  },
+  "checks": [
+    {
+      "url": "https://docs.docker.com/desktop/release-notes.md",
+      "extract": {
+        "type": "regex",
+        "pattern": "(?m)^## ([0-9]+\\.[0-9]+\\.[0-9]+)$",
+        "versionGroup": 1
+      }
+    }
+  ],
+  "updatePageURL": "https://docs.docker.com/desktop/release-notes/",
+  "download": {
+    "url": null,
+    "sourceURL": "https://docs.docker.com/desktop/release-notes.md",
+    "pattern": "\\[Mac \\(Apple chip\\)\\]\\((https://desktop\\.docker\\.com/mac/main/arm64/[^)]+/Docker\\.dmg)\\)",
+    "urlGroup": 1
+  }
+}

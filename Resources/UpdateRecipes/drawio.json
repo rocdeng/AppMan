@@ -1,0 +1,27 @@
+{
+  "id": "com.jgraph.drawio.desktop",
+  "name": "draw.io",
+  "recipePrompt": "这个规则用于检测 draw.io Desktop。使用官方 GitHub 仓库 jgraph/drawio-desktop 的 latest release API 获取版本；Apple Silicon 只选择文件名含 arm64 的 macOS DMG，不要选择 x64、Windows 或 Linux 安装包。",
+  "match": {
+    "bundleIdentifier": "com.jgraph.drawio.desktop",
+    "appName": "draw.io",
+    "officialHost": "drawio.com"
+  },
+  "checks": [
+    {
+      "url": "https://api.github.com/repos/jgraph/drawio-desktop/releases/latest",
+      "extract": {
+        "type": "regex",
+        "pattern": "\"tag_name\"\\s*:\\s*\"v?([0-9]+(?:\\.[0-9A-Za-z]+){1,5})\"",
+        "versionGroup": 1
+      }
+    }
+  ],
+  "updatePageURL": "https://github.com/jgraph/drawio-desktop/releases/latest",
+  "download": {
+    "url": null,
+    "sourceURL": "https://api.github.com/repos/jgraph/drawio-desktop/releases/latest",
+    "pattern": "\"browser_download_url\"\\s*:\\s*\"(https://github\\.com/jgraph/drawio-desktop/releases/download/[^\"]+/draw\\.io-arm64-[^\"]+\\.dmg)\"",
+    "urlGroup": 1
+  }
+}

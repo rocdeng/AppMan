@@ -1,13 +1,27 @@
 {
   "id": "app.omlx",
   "name": "oMLX",
-  "recipePrompt": "这个规则用于识别 oMLX。当前未确认官方发布源和稳定更新接口，搜索结果容易命中教程文章，先不自动抽取版本。",
+  "recipePrompt": "这个规则用于检测 oMLX。App 内置代码指向官方 GitHub 仓库 jundot/omlx；使用 GitHub latest release 的 tag_name 读取版本，并在多个 DMG 中优先选择与当前 macOS 主版本匹配的安装包。",
   "match": {
     "bundleIdentifier": "app.omlx",
     "appName": "oMLX",
-    "officialHost": null
+    "officialHost": "github.com"
   },
-  "checks": [],
-  "updatePageURL": null,
-  "download": null
+  "checks": [
+    {
+      "url": "https://api.github.com/repos/jundot/omlx/releases/latest",
+      "extract": {
+        "type": "regex",
+        "pattern": "\"tag_name\"\\s*:\\s*\"v?([0-9]+(?:\\.[0-9A-Za-z]+){1,5})\"",
+        "versionGroup": 1
+      }
+    }
+  ],
+  "updatePageURL": "https://github.com/jundot/omlx",
+  "download": {
+    "url": null,
+    "sourceURL": "https://api.github.com/repos/jundot/omlx/releases/latest",
+    "pattern": "\"browser_download_url\"\\s*:\\s*\"([^\"]*oMLX[^\"]*\\.dmg)\"",
+    "urlGroup": 1
+  }
 }

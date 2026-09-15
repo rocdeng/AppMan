@@ -1,0 +1,27 @@
+{
+  "id": "party.mihomo.app",
+  "name": "Clash Party",
+  "recipePrompt": "这个规则用于检测 Clash Party。App 内置更新配置指向 mihomo-party-org 的 GitHub 发布，官网也链接到该组织；使用 clash-party 仓库的 latest release，并只选择 clash-party-macos 安装包，避免选到同一发布中的旧 mihomo-party 命名包。",
+  "match": {
+    "bundleIdentifier": "party.mihomo.app",
+    "appName": "Clash Party",
+    "officialHost": "github.com"
+  },
+  "checks": [
+    {
+      "url": "https://api.github.com/repos/mihomo-party-org/clash-party/releases/latest",
+      "extract": {
+        "type": "regex",
+        "pattern": "\"tag_name\"\\s*:\\s*\"v?([0-9]+(?:\\.[0-9A-Za-z]+){1,5})\"",
+        "versionGroup": 1
+      }
+    }
+  ],
+  "updatePageURL": "https://github.com/mihomo-party-org/clash-party",
+  "download": {
+    "url": null,
+    "sourceURL": "https://api.github.com/repos/mihomo-party-org/clash-party/releases/latest",
+    "pattern": "\"browser_download_url\"\\s*:\\s*\"([^\"]*clash-party-macos[^\"]*\\.pkg)\"",
+    "urlGroup": 1
+  }
+}

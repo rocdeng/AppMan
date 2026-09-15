@@ -28,52 +28,51 @@ public struct CompositeAppUpdateChecker: AppUpdateChecking {
     ) throws -> [AppRecord] {
         var updatedApps = apps
 
-        try updateApps(
-            of: .homebrewCask,
-            in: apps,
-            checker: homebrewChecker,
-            updatedApps: &updatedApps,
-            onProgress: onProgress
-        )
-        try updateApps(
-            of: .macAppStore,
-            in: apps,
-            checker: macAppStoreChecker,
-            updatedApps: &updatedApps,
-            onProgress: onProgress
-        )
-        try updateApps(
-            of: .sparkle,
-            in: apps,
-            checker: sparkleChecker,
-            updatedApps: &updatedApps,
-            onProgress: onProgress
-        )
-        try updateApps(
-            of: .manual,
-            in: apps,
-            checker: selfHostedChecker,
-            updatedApps: &updatedApps,
-            onProgress: onProgress
-        )
+        let batches = makeCheckBatches(for: apps)
+        let checkedBatches = try LimitedConcurrentMap.map(batches, limit: 3) { batch in
+            let checkedApps = try batch.checker.checkUpdates(
+                for: batch.indexedApps.map(\.element),
+                onProgress: onProgress
+            )
+            return zip(batch.indexedApps, checkedApps).map { indexedApp, checkedApp in
+                (indexedApp.offset, checkedApp)
+            }
+        }
+
+        for (offset, checkedApp) in checkedBatches.flatMap({ $0 }) {
+            updatedApps[offset] = checkedApp
+        }
 
         return updatedApps
     }
 
-    private func updateApps(
-        of sourceKind: InstallSourceKind,
-        in apps: [AppRecord],
-        checker: any AppUpdateChecking,
-        updatedApps: inout [AppRecord],
-        onProgress: @escaping @Sendable (AppRecord) -> Void
-    ) throws {
-        let indexedApps = apps.enumerated().filter { _, app in
-            app.updateStatus != .ignored && matches(sourceKind, app.installSource)
-        }
-        let checkedApps = try checker.checkUpdates(for: indexedApps.map(\.element), onProgress: onProgress)
+    private func makeCheckBatches(for apps: [AppRecord]) -> [UpdateCheckBatch] {
+        var batches: [UpdateCheckBatch] = []
 
-        for (offset, checkedApp) in checkedApps.enumerated() where indexedApps.indices.contains(offset) {
-            updatedApps[indexedApps[offset].offset] = checkedApp
+        let homebrewApps = indexedApps(of: .homebrewCask, in: apps)
+        if !homebrewApps.isEmpty {
+            batches.append(UpdateCheckBatch(indexedApps: homebrewApps, checker: homebrewChecker))
+        }
+
+        for (sourceKind, checker) in [
+            (InstallSourceKind.macAppStore, macAppStoreChecker),
+            (.sparkle, sparkleChecker),
+            (.manual, selfHostedChecker),
+        ] {
+            batches.append(contentsOf: indexedApps(of: sourceKind, in: apps).map { indexedApp in
+                UpdateCheckBatch(indexedApps: [indexedApp], checker: checker)
+            })
+        }
+
+        return batches
+    }
+
+    private func indexedApps(
+        of sourceKind: InstallSourceKind,
+        in apps: [AppRecord]
+    ) -> [(offset: Int, element: AppRecord)] {
+        apps.enumerated().filter { _, app in
+            app.updateStatus != .ignored && matches(sourceKind, app.installSource)
         }
     }
 
@@ -91,6 +90,11 @@ public struct CompositeAppUpdateChecker: AppUpdateChecking {
             return false
         }
     }
+}
+
+private struct UpdateCheckBatch: Sendable {
+    let indexedApps: [(offset: Int, element: AppRecord)]
+    let checker: any AppUpdateChecking
 }
 
 private enum InstallSourceKind {

@@ -2,11 +2,23 @@ import Foundation
 
 public struct SparkleAppcastUpdateChecker: AppUpdateChecking {
     private let fetchData: @Sendable (URL) throws -> Data
+    private let recipeStore: any UpdateRecipeStoring
 
-    public init(fetchData: @escaping @Sendable (URL) throws -> Data = { url in
-        try Data(contentsOf: url)
-    }) {
+    public init(
+        fetchData: @escaping @Sendable (URL) throws -> Data = { url in
+            try SparkleAppcastUpdateChecker.defaultFetchData(url)
+        },
+        recipeStore: any UpdateRecipeStoring = FileUpdateRecipeStore()
+    ) {
         self.fetchData = fetchData
+        self.recipeStore = recipeStore
+    }
+
+    public static func defaultFetchData(_ url: URL) throws -> Data {
+        var request = URLRequest(url: url)
+        request.timeoutInterval = 30
+        request.setValue("AppMan", forHTTPHeaderField: "User-Agent")
+        return try URLSession.shared.synchronousData(for: request)
     }
 
     public func checkUpdates(for apps: [AppRecord]) throws -> [AppRecord] {
@@ -34,118 +46,64 @@ public struct SparkleAppcastUpdateChecker: AppUpdateChecking {
         updatedApp.updateURLIsDirectDownload = false
 
         do {
+            if let recipe = try recipeStore.load().first(where: { recipe in
+                recipe.match.bundleIdentifier == app.bundleIdentifier
+                    || recipe.match.appName?.localizedCaseInsensitiveCompare(app.name) == .orderedSame
+            }),
+               !recipe.checks.isEmpty,
+               let release = try UpdateRecipeRunner(fetchData: fetchData).latestRelease(using: recipe) {
+                return applying(
+                    latestVersion: release.latestVersion,
+                    packageURL: release.packageURL,
+                    installedVersion: recipe.installedVersion(for: app),
+                    to: app,
+                    fallbackURL: recipe.updatePageURL ?? feedURL
+                )
+            }
+
             let data = try fetchData(feedURL)
-            guard let latestVersion = SparkleAppcastParser.parseLatestVersion(from: data) else {
+            guard let release = SparkleReleaseParser.parseLatestRelease(from: data, baseURL: feedURL) else {
                 updatedApp.updateStatus = .checkFailed(message: "Sparkle appcast 中没有版本信息")
                 return updatedApp
             }
 
-            if AppVersionComparator.isLatestVersion(latestVersion, newerThan: app.shortVersion) {
-                updatedApp.updateStatus = .updateAvailable(
-                    installedVersion: app.shortVersion,
-                    latestVersion: latestVersion
-                )
-            } else {
-                updatedApp.updateStatus = .upToDate
-            }
+            return applying(
+                latestVersion: release.latestVersion,
+                packageURL: release.packageURL,
+                to: app,
+                fallbackURL: feedURL
+            )
         } catch {
             updatedApp.updateStatus = .checkFailed(message: error.localizedDescription)
         }
 
         return updatedApp
     }
-}
 
-private final class SparkleAppcastParser: NSObject, XMLParserDelegate {
-    private var shortVersions: [String] = []
-    private var buildVersions: [String] = []
-    private var capturedText = ""
-    private var isInsideItem = false
+    private func applying(
+        latestVersion: String,
+        packageURL: URL?,
+        installedVersion: String? = nil,
+        to app: AppRecord,
+        fallbackURL: URL
+    ) -> AppRecord {
+        var updatedApp = app
+        updatedApp.updateURL = fallbackURL
+        updatedApp.updateURLIsDirectDownload = false
 
-    static func parseLatestVersion(from data: Data) -> String? {
-        let delegate = SparkleAppcastParser()
-        let parser = XMLParser(data: data)
-        parser.delegate = delegate
-        guard parser.parse() else {
-            return nil
+        let installedVersion = installedVersion ?? app.shortVersion
+        if AppVersionComparator.isLatestVersion(latestVersion, newerThan: installedVersion) {
+            if let packageURL {
+                updatedApp.updateURL = packageURL
+                updatedApp.updateURLIsDirectDownload = true
+            }
+            updatedApp.updateStatus = .updateAvailable(
+                installedVersion: installedVersion,
+                latestVersion: latestVersion
+            )
+        } else {
+            updatedApp.updateStatus = .upToDate
         }
-        return delegate.latestVersion
-    }
-
-    private var latestVersion: String? {
-        maxVersion(in: shortVersions) ?? maxVersion(in: buildVersions)
-    }
-
-    private func maxVersion(in versions: [String]) -> String? {
-        versions.max { first, second in
-            first.compare(second, options: .numeric) == .orderedAscending
-        }
-    }
-
-    func parser(
-        _ parser: XMLParser,
-        didStartElement elementName: String,
-        namespaceURI: String?,
-        qualifiedName qName: String?,
-        attributes attributeDict: [String: String] = [:]
-    ) {
-        capturedText = ""
-
-        if elementName == "item" {
-            isInsideItem = true
-        }
-
-        guard isInsideItem else {
-            return
-        }
-
-        if let shortVersion = sparkleValue(named: "shortVersionString", in: attributeDict) {
-            shortVersions.append(shortVersion)
-        } else if let buildVersion = sparkleValue(named: "version", in: attributeDict) {
-            buildVersions.append(buildVersion)
-        }
-    }
-
-    func parser(_ parser: XMLParser, foundCharacters string: String) {
-        capturedText += string
-    }
-
-    func parser(
-        _ parser: XMLParser,
-        didEndElement elementName: String,
-        namespaceURI: String?,
-        qualifiedName qName: String?
-    ) {
-        defer {
-            capturedText = ""
-        }
-
-        if elementName == "item" {
-            isInsideItem = false
-            return
-        }
-
-        guard isInsideItem else {
-            return
-        }
-
-        let name = qName ?? elementName
-        let value = capturedText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !value.isEmpty else {
-            return
-        }
-
-        if name.hasSuffix("shortVersionString") {
-            shortVersions.append(value)
-        } else if name.hasSuffix("version") {
-            buildVersions.append(value)
-        }
-    }
-
-    private func sparkleValue(named suffix: String, in attributes: [String: String]) -> String? {
-        for (key, value) in attributes where key.hasSuffix(suffix) && !value.isEmpty {
-            return value
-        }
-        return nil
+        return updatedApp
     }
 }

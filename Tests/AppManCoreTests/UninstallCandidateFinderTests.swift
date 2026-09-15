@@ -100,6 +100,45 @@ final class UninstallCandidateFinderTests: XCTestCase {
         XCTAssertTrue(candidates.contains { $0.url.standardizedFileURL.path == vendorSupportURL.standardizedFileURL.path })
     }
 
+    func testDoesNotMatchShortDirectoryContainedInAppName() throws {
+        let root = try makeTemporaryDirectory()
+        let appURL = root.appendingPathComponent("Applications/Google Chrome.app", isDirectory: true)
+        let directories = ["Application Support", "Caches", "Logs"]
+        try FileManager.default.createDirectory(at: appURL, withIntermediateDirectories: true)
+        for directory in directories {
+            try FileManager.default.createDirectory(
+                at: root.appendingPathComponent("Library/\(directory)/Google", isDirectory: true),
+                withIntermediateDirectories: true
+            )
+            for unrelatedName in ["go", "com"] {
+                try FileManager.default.createDirectory(
+                    at: root.appendingPathComponent("Library/\(directory)/\(unrelatedName)", isDirectory: true),
+                    withIntermediateDirectories: true
+                )
+            }
+        }
+
+        let app = AppRecord(
+            id: "google-chrome",
+            name: "Google Chrome",
+            bundleIdentifier: "com.google.Chrome",
+            shortVersion: nil,
+            buildVersion: nil,
+            path: appURL,
+            sizeBytes: 0
+        )
+        let finder = UninstallCandidateFinder(
+            libraryDirectory: root.appendingPathComponent("Library", isDirectory: true),
+            downloadsDirectory: nil
+        )
+
+        let candidates = try finder.findCandidates(for: app)
+
+        XCTAssertEqual(candidates.filter { $0.name == "Google" }.count, 3)
+        XCTAssertFalse(candidates.contains { $0.name == "go" })
+        XCTAssertFalse(candidates.contains { $0.name == "com" })
+    }
+
     func testFindsSandboxScriptsAndGroupContainer() throws {
         let root = try makeTemporaryDirectory()
         let appURL = root.appendingPathComponent("Applications/Clash Mi.app", isDirectory: true)
@@ -132,6 +171,55 @@ final class UninstallCandidateFinderTests: XCTestCase {
             [appURL, applicationScriptURL, containerURL, groupContainerURL].map { $0.standardizedFileURL.path }
         )
         XCTAssertEqual(candidates.map(\.kind), [.application, .applicationScript, .container, .groupContainer])
+    }
+
+    func testFindsNestedBundleDataAndDoesNotMatchNamePrefix() throws {
+        let root = try makeTemporaryDirectory()
+        let appURL = root.appendingPathComponent("Applications/Doubao.app", isDirectory: true)
+        let extensionURL = appURL.appendingPathComponent("Contents/PlugIns/finder-ext.appex", isDirectory: true)
+        let supportURL = root.appendingPathComponent("Library/Application Support/Doubao", isDirectory: true)
+        let falsePositiveURL = root.appendingPathComponent("Library/Application Support/DoubaoIme", isDirectory: true)
+        let httpStorageURL = root.appendingPathComponent("Library/HTTPStorages/com.example.doubao.extension", isDirectory: true)
+        let extensionScriptsURL = root.appendingPathComponent("Library/Application Scripts/com.example.doubao.extension", isDirectory: true)
+        let extensionContainerURL = root.appendingPathComponent("Library/Containers/com.example.doubao.extension", isDirectory: true)
+        let extensionPreferenceURL = root.appendingPathComponent("Library/Preferences/com.example.doubao.extension.helper.plist")
+        try FileManager.default.createDirectory(at: appURL, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(
+            at: extensionURL.appendingPathComponent("Contents", isDirectory: true),
+            withIntermediateDirectories: true
+        )
+        for url in [supportURL, falsePositiveURL, httpStorageURL, extensionScriptsURL, extensionContainerURL] {
+            try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+        }
+        try FileManager.default.createDirectory(at: extensionPreferenceURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data("preference".utf8).write(to: extensionPreferenceURL)
+        let plist: [String: String] = ["CFBundleIdentifier": "com.example.doubao.extension"]
+        let plistData = try PropertyListSerialization.data(fromPropertyList: plist, format: .xml, options: 0)
+        try plistData.write(to: extensionURL.appendingPathComponent("Contents/Info.plist"))
+
+        let app = AppRecord(
+            id: "doubao",
+            name: "Doubao",
+            bundleIdentifier: "com.example.doubao",
+            shortVersion: nil,
+            buildVersion: nil,
+            path: appURL,
+            sizeBytes: 0
+        )
+        let finder = UninstallCandidateFinder(
+            libraryDirectory: root.appendingPathComponent("Library", isDirectory: true),
+            downloadsDirectory: nil
+        )
+
+        let candidates = try finder.findCandidates(for: app)
+
+        let candidatePaths = Set(candidates.map { $0.url.standardizedFileURL.path })
+        XCTAssertTrue(candidatePaths.contains(supportURL.standardizedFileURL.path))
+        XCTAssertTrue(candidatePaths.contains(httpStorageURL.standardizedFileURL.path))
+        XCTAssertTrue(candidatePaths.contains(extensionScriptsURL.standardizedFileURL.path))
+        XCTAssertTrue(candidatePaths.contains(extensionContainerURL.standardizedFileURL.path))
+        XCTAssertTrue(candidatePaths.contains(extensionPreferenceURL.standardizedFileURL.path))
+        XCTAssertFalse(candidatePaths.contains(falsePositiveURL.standardizedFileURL.path))
     }
 
     private func makeTemporaryDirectory() throws -> URL {

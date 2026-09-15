@@ -1,7 +1,7 @@
 {
   "id": "com.googlecode.iterm2",
   "name": "iTerm2",
-  "recipePrompt": "这个规则用于检测 iTerm2 稳定版。官方 Sparkle appcast 是 https://iterm2.com/appcasts/final.xml，enclosure 上的 sparkle:version 是稳定版版本号。不要从下载页面的文件日期或 zip 后缀猜版本。",
+  "recipePrompt": "这个规则用于检测 iTerm2 现代 macOS 稳定版。必须使用 App 内置的 https://iterm2.com/appcasts/final_modern.xml；final.xml 只保留到 3.3.12，不能用于当前版本。enclosure 上的 sparkle:version 是稳定版版本号。",
   "match": {
     "bundleIdentifier": "com.googlecode.iterm2",
     "appName": "iTerm2",
@@ -9,7 +9,7 @@
   },
   "checks": [
     {
-      "url": "https://iterm2.com/appcasts/final.xml",
+      "url": "https://iterm2.com/appcasts/final_modern.xml",
       "extract": {
         "type": "regex",
         "pattern": "sparkle:version=\"([0-9]+(?:\\.[0-9A-Za-z]+){1,5})\"",
@@ -20,7 +20,7 @@
   "updatePageURL": "https://iterm2.com/downloads.html",
   "download": {
     "url": null,
-    "sourceURL": "https://iterm2.com/appcasts/final.xml",
+    "sourceURL": "https://iterm2.com/appcasts/final_modern.xml",
     "pattern": "url=\"([^\"]*iTerm2-[^\"]+\\.zip)\"",
     "urlGroup": 1
   }

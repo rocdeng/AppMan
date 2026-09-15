@@ -26,9 +26,9 @@ private enum AppTableColumnLayout {
     static let nameLeadingPadding: CGFloat = 29
     static let cellHorizontalPadding: CGFloat = 8
 
-    static func nameWidth(for totalWidth: CGFloat) -> CGFloat {
-        let fixedWidth = sourceWidth + currentVersionWidth + latestVersionWidth + scrollerWidth
-        return max(nameWidth, totalWidth - fixedWidth)
+    static func nameWidth(for tableWidth: CGFloat) -> CGFloat {
+        let fixedWidth = sourceWidth + currentVersionWidth + latestVersionWidth
+        return max(nameWidth, tableWidth - fixedWidth)
     }
 }
 
@@ -38,6 +38,7 @@ struct AppListView: View {
     @State private var selectedAppID: AppRecord.ID?
     @State private var didScanOnAppear = false
     @State private var searchText = ""
+    @State private var searchFocusToken = 0
     @State private var isShowingAppInfo = false
     @State private var appPendingUninstall: AppRecord?
     @State private var appPendingSelfUpdateURL: AppRecord?
@@ -63,53 +64,120 @@ struct AppListView: View {
 
     var body: some View {
         ZStack(alignment: .top) {
-            Color.white
+            Color(nsColor: .windowBackgroundColor)
                 .ignoresSafeArea()
 
             content
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color.white)
+        .background(Color(nsColor: .windowBackgroundColor))
         .background(
-            WindowChromeConfigurator(
-                chromeHeight: selectedSection == .apps
-                    ? AppLayout.chromeHeight
-                    : AppLayout.titlebarHeight + AppLayout.toolbarHeight,
-                chromeContent: AppChromeView(
-                    selectedSection: $selectedSection,
-                    searchText: $searchText,
-                    showsHeader: selectedSection == .apps,
-                    hasSelection: selectedApp != nil,
-                    isScanning: viewModel.isScanning,
-                    isCheckingUpdates: viewModel.isCheckingUpdates,
-                    isUpdatingApp: viewModel.isUpdatingApp,
-                    isUninstalling: viewModel.isUninstalling,
-                    showInfo: {
-                        isShowingAppInfo = true
-                    },
-                    checkSelectedAppUpdates: {
-                        if let selectedApp {
-                            await viewModel.checkUpdates(for: selectedApp)
-                        }
-                    },
-                    refreshAppList: {
-                        await viewModel.scan()
-                    },
-                    checkAllUpdates: {
-                        await viewModel.scan()
-                        await viewModel.checkUpdates()
-                    },
-                    updateAll: {
-                        await viewModel.updateAll { url in
-                            NSWorkspace.shared.open(url)
-                        }
-                    },
-                    uninstall: {
-                        appPendingUninstall = selectedApp
-                    }
-                )
+            SystemWindowConfigurator(
+                subtitle: selectedSection == .apps ? "所有应用程序" : "设置"
             )
         )
+        .toolbar {
+            ToolbarItem(placement: .principal) {
+                HStack(spacing: 10) {
+                    ControlGroup {
+                    Button {
+                        isShowingAppInfo = true
+                    } label: {
+                        Image(systemName: "info.circle")
+                            .font(.system(size: 15, weight: .regular))
+                            .frame(width: 36, height: 36)
+                    }
+                    .disabled(isBusy || selectedApp == nil)
+                    .help("App 信息")
+
+                    Button {
+                        guard let selectedApp else {
+                            return
+                        }
+                        Task {
+                            await viewModel.checkUpdates(for: selectedApp)
+                        }
+                    } label: {
+                        Image(systemName: "arrow.clockwise.circle")
+                            .font(.system(size: 15, weight: .regular))
+                            .frame(width: 36, height: 36)
+                    }
+                    .disabled(isBusy || selectedApp == nil)
+                    .help("检查更新")
+                    }
+
+                    ControlGroup {
+                    Menu {
+                        Button("更新 App 列表") {
+                            Task {
+                                await viewModel.scan()
+                            }
+                        }
+                        Button("检查所有更新") {
+                            Task {
+                                await viewModel.scan()
+                                await viewModel.checkUpdates()
+                            }
+                        }
+                        Button("更新所有") {
+                            Task {
+                                await viewModel.updateAll { url in
+                                    NSWorkspace.shared.open(url)
+                                }
+                            }
+                        }
+                    } label: {
+                        Image(systemName: "ellipsis.circle")
+                            .font(.system(size: 15, weight: .regular))
+                            .frame(width: 36, height: 36)
+                    }
+                    .disabled(isBusy)
+                    .help("更多更新操作")
+
+                    Button {
+                        appPendingUninstall = selectedApp
+                    } label: {
+                        Image(systemName: "trash")
+                            .font(.system(size: 14, weight: .regular))
+                            .frame(width: 36, height: 36)
+                    }
+                    .disabled(isBusy || selectedApp == nil)
+                    .help("卸载")
+                    }
+
+                    ZStack {
+                        ToolbarSectionControl(selection: $selectedSection)
+                        HStack(spacing: 0) {
+                            ForEach(AppSection.allCases) { section in
+                                Text(section.rawValue)
+                                    .font(.system(size: 13))
+                                    .foregroundStyle(.primary)
+                                    .frame(maxWidth: .infinity)
+                            }
+                        }
+                        .allowsHitTesting(false)
+                    }
+                    .frame(width: 230)
+                }
+                .controlSize(.large)
+            }
+
+            ToolbarItem(placement: .primaryAction) {
+                ToolbarSearchField(
+                    text: $searchText,
+                    focusToken: searchFocusToken
+                )
+                .frame(width: 205)
+            }
+        }
+        .background {
+            Button("搜索") {
+                searchFocusToken += 1
+            }
+            .keyboardShortcut("f", modifiers: .command)
+            .opacity(0)
+            .frame(width: 0, height: 0)
+        }
         .overlay {
             if viewModel.isScanning || viewModel.isCheckingUpdates || viewModel.isUpdatingApp || viewModel.isUninstalling {
                 ProgressOverlay(text: progressText) {
@@ -131,6 +199,45 @@ struct AppListView: View {
             Button("好", role: .cancel) {}
         } message: {
             Text(viewModel.errorMessage ?? "未知错误")
+        }
+        .alert(
+            "下载失败",
+            isPresented: Binding(
+                get: { viewModel.downloadFailurePrompt != nil },
+                set: { isPresented in
+                    if !isPresented {
+                        viewModel.dismissDownloadFailurePrompt()
+                    }
+                }
+            )
+        ) {
+            Button("访问官网") {
+                viewModel.openDownloadFailureWebsite { url in
+                    NSWorkspace.shared.open(url)
+                }
+            }
+            Button("取消", role: .cancel) {
+                viewModel.dismissDownloadFailurePrompt()
+            }
+        } message: {
+            if let prompt = viewModel.downloadFailurePrompt {
+                Text("\(prompt.message)\n\n是否访问 \(prompt.appName) 官网手工下载？")
+            }
+        }
+        .alert(
+            "Recipe 校验",
+            isPresented: Binding(
+                get: { viewModel.recipeValidationNotice != nil },
+                set: { isPresented in
+                    if !isPresented {
+                        viewModel.recipeValidationNotice = nil
+                    }
+                }
+            )
+        ) {
+            Button("好", role: .cancel) {}
+        } message: {
+            Text(viewModel.recipeValidationNotice ?? "")
         }
         .alert(
             "部分关联项未清理",
@@ -157,7 +264,7 @@ struct AppListView: View {
                     .padding(.horizontal, 14)
                     .padding(.vertical, 8)
                     .background(.regularMaterial, in: Capsule())
-                    .padding(.top, AppLayout.titlebarHeight + AppLayout.toolbarHeight + 8)
+                    .padding(.top, 8)
                     .onAppear {
                         Task {
                             try? await Task.sleep(nanoseconds: 1_600_000_000)
@@ -171,6 +278,22 @@ struct AppListView: View {
         .sheet(isPresented: $isShowingAppInfo) {
             if let selectedApp {
                 AppInfoDialog(app: selectedApp)
+            }
+        }
+        .sheet(
+            isPresented: Binding(
+                get: { viewModel.recipeValidationPresentation != nil },
+                set: { isPresented in
+                    if !isPresented {
+                        viewModel.dismissRecipeValidation()
+                    }
+                }
+            )
+        ) {
+            if let presentation = viewModel.recipeValidationPresentation {
+                RecipeValidationDialog(presentation: presentation) {
+                    viewModel.dismissRecipeValidation()
+                }
             }
         }
         .sheet(item: $appPendingSelfUpdateURL) { app in
@@ -241,6 +364,13 @@ struct AppListView: View {
         return "正在卸载..."
     }
 
+    private var isBusy: Bool {
+        viewModel.isScanning
+            || viewModel.isCheckingUpdates
+            || viewModel.isUpdatingApp
+            || viewModel.isUninstalling
+    }
+
     @ViewBuilder
     private var content: some View {
         switch selectedSection {
@@ -253,10 +383,22 @@ struct AppListView: View {
 
     @ViewBuilder
     private var appsSection: some View {
+        VStack(spacing: 0) {
+            AppCatalogHeader()
+                .frame(height: AppLayout.headerHeight)
+
             AppCatalogView(
                 apps: viewModel.apps,
                 selectedAppID: $selectedAppID,
                 searchText: $searchText,
+                showInfo: {
+                    isShowingAppInfo = true
+                },
+                validateRecipe: { app in
+                    Task {
+                        await viewModel.validateRecipe(for: app)
+                    }
+                },
                 updateApp: { app in
                     await viewModel.update(app) { url in
                         NSWorkspace.shared.open(url)
@@ -269,6 +411,7 @@ struct AppListView: View {
                     viewModel.ignoreUpdates(for: app)
                 }
             )
+        }
     }
 
     @ViewBuilder
@@ -320,7 +463,7 @@ struct AppListView: View {
                 .disabled(selectedIgnoredAppPath == nil)
             }
         }
-        .padding(.top, AppLayout.titlebarHeight + AppLayout.toolbarHeight + 26)
+        .padding(.top, 26)
         .padding(.horizontal, 32)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
@@ -430,7 +573,7 @@ private struct AppChromeView: View {
                             isMenuDisabled: isBusy,
                             primaryAction: checkSelectedAppUpdates,
                             menuItems: [
-                                LiquidSplitMenuButton.Item(title: "更新 APP 列表", action: refreshAppList),
+                                LiquidSplitMenuButton.Item(title: "更新 App 列表", action: refreshAppList),
                                 LiquidSplitMenuButton.Item(title: "检查所有更新", action: checkAllUpdates),
                                 LiquidSplitMenuButton.Item(title: "更新所有", action: updateAll),
                             ]
@@ -530,6 +673,102 @@ private struct AppInfoDialog: View {
         }
         .padding(22)
         .frame(width: 520)
+    }
+}
+
+private struct RecipeValidationDialog: View {
+    let presentation: RecipeValidationPresentation
+    let dismiss: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(spacing: 10) {
+                AppIconImage(path: presentation.app.path)
+                    .frame(width: 36, height: 36)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Recipe 校验：\(presentation.app.name)")
+                        .font(.system(size: 16, weight: .semibold))
+                    Text(presentation.recipe.id)
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                        .textSelection(.enabled)
+                }
+            }
+
+            GroupBox("校验结果") {
+                validationResult
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.vertical, 4)
+            }
+
+            GroupBox("Recipe JSON") {
+                ScrollView([.horizontal, .vertical]) {
+                    Text(presentation.recipeJSON)
+                        .font(.system(size: 11, design: .monospaced))
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(8)
+                }
+                .frame(minHeight: 290)
+            }
+
+            HStack {
+                Spacer()
+                Button("好", action: dismiss)
+                    .keyboardShortcut(.defaultAction)
+            }
+        }
+        .padding(20)
+        .frame(width: 680, height: 600)
+    }
+
+    @ViewBuilder
+    private var validationResult: some View {
+        switch presentation.state {
+        case .validating:
+            HStack(spacing: 8) {
+                ProgressView()
+                    .controlSize(.small)
+                Text("正在提取最新版本并校验安装包地址...")
+            }
+            .font(.system(size: 13))
+        case let .completed(result):
+            Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 7) {
+                RecipeResultRow(title: "最新版", value: result.latestVersion ?? "未获取到")
+                RecipeResultRow(title: "安装包", value: result.packageURL?.absoluteString ?? "未获取到")
+                GridRow {
+                    Text("下载校验")
+                        .foregroundStyle(.secondary)
+                    Label(
+                        result.downloadValidationMessage,
+                        systemImage: result.downloadIsValid ? "checkmark.circle.fill" : "xmark.circle.fill"
+                    )
+                    .foregroundStyle(result.downloadIsValid ? Color.green : Color.red)
+                    .textSelection(.enabled)
+                }
+            }
+            .font(.system(size: 13))
+        case let .failed(message):
+            Label(message, systemImage: "xmark.circle.fill")
+                .font(.system(size: 13))
+                .foregroundStyle(.red)
+                .textSelection(.enabled)
+        }
+    }
+}
+
+private struct RecipeResultRow: View {
+    let title: String
+    let value: String
+
+    var body: some View {
+        GridRow {
+            Text(title)
+                .foregroundStyle(.secondary)
+            Text(value)
+                .textSelection(.enabled)
+                .lineLimit(2)
+        }
     }
 }
 
@@ -1010,6 +1249,109 @@ private struct AppToolbarTitleView: View {
                 .foregroundStyle(.secondary)
         }
         .frame(width: 220, height: 36, alignment: .leading)
+    }
+}
+
+private struct ToolbarSearchField: NSViewRepresentable {
+    @Binding var text: String
+    let focusToken: Int
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(text: $text)
+    }
+
+    func makeNSView(context: Context) -> NSSearchField {
+        let searchField = NSSearchField()
+        searchField.placeholderString = "搜索"
+        searchField.controlSize = .large
+        searchField.font = NSFont.systemFont(ofSize: 14)
+        searchField.target = context.coordinator
+        searchField.action = #selector(Coordinator.searchFieldChanged(_:))
+        searchField.delegate = context.coordinator
+        return searchField
+    }
+
+    func updateNSView(_ searchField: NSSearchField, context: Context) {
+        context.coordinator.text = $text
+        if searchField.stringValue != text {
+            searchField.stringValue = text
+        }
+
+        if context.coordinator.lastFocusToken != focusToken {
+            context.coordinator.lastFocusToken = focusToken
+            DispatchQueue.main.async {
+                searchField.window?.makeFirstResponder(searchField)
+            }
+        }
+    }
+
+    final class Coordinator: NSObject, NSSearchFieldDelegate {
+        var text: Binding<String>
+        var lastFocusToken = 0
+
+        init(text: Binding<String>) {
+            self.text = text
+        }
+
+        @objc func searchFieldChanged(_ sender: NSSearchField) {
+            text.wrappedValue = sender.stringValue
+        }
+
+        func controlTextDidChange(_ notification: Notification) {
+            guard let searchField = notification.object as? NSSearchField else {
+                return
+            }
+            text.wrappedValue = searchField.stringValue
+        }
+    }
+}
+
+private struct ToolbarSectionControl: NSViewRepresentable {
+    @Binding var selection: AppSection
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(selection: $selection)
+    }
+
+    func makeNSView(context: Context) -> NSSegmentedControl {
+        let control = NSSegmentedControl(
+            labels: AppSection.allCases.map { _ in " " },
+            trackingMode: .selectOne,
+            target: context.coordinator,
+            action: #selector(Coordinator.selectionChanged(_:))
+        )
+        control.segmentStyle = .automatic
+        control.controlSize = .large
+        control.font = .systemFont(ofSize: 13)
+        control.selectedSegmentBezelColor = .controlAccentColor
+        control.selectedSegment = selectedIndex
+        return control
+    }
+
+    func updateNSView(_ control: NSSegmentedControl, context: Context) {
+        context.coordinator.selection = $selection
+        if control.selectedSegment != selectedIndex {
+            control.selectedSegment = selectedIndex
+        }
+    }
+
+    private var selectedIndex: Int {
+        AppSection.allCases.firstIndex(of: selection) ?? 0
+    }
+
+    final class Coordinator: NSObject {
+        var selection: Binding<AppSection>
+
+        init(selection: Binding<AppSection>) {
+            self.selection = selection
+        }
+
+        @objc func selectionChanged(_ sender: NSSegmentedControl) {
+            guard AppSection.allCases.indices.contains(sender.selectedSegment) else {
+                return
+            }
+            selection.wrappedValue = AppSection.allCases[sender.selectedSegment]
+        }
     }
 }
 
@@ -1691,6 +2033,47 @@ private struct WindowChromeConfigurator<ChromeContent: View>: NSViewRepresentabl
 
 }
 
+private struct SystemWindowConfigurator: NSViewRepresentable {
+    let subtitle: String
+
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView()
+        DispatchQueue.main.async {
+            configure(window: view.window)
+        }
+        return view
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {
+        DispatchQueue.main.async {
+            configure(window: nsView.window)
+        }
+    }
+
+    private func configure(window: NSWindow?) {
+        guard let window else {
+            return
+        }
+
+        window.title = "AppMan"
+        window.subtitle = subtitle
+        window.titleVisibility = .visible
+        window.titlebarAppearsTransparent = true
+        window.toolbarStyle = .unified
+        window.toolbar?.sizeMode = .regular
+        window.titlebarSeparatorStyle = .none
+        window.backgroundColor = .windowBackgroundColor
+        window.sharingType = .readOnly
+        window.acceptsMouseMovedEvents = true
+
+        if CommandLine.arguments.contains("--ui-snapshot") {
+            window.setContentSize(NSSize(width: 960, height: 640))
+        }
+
+        AppUISnapshotter.scheduleIfNeeded(for: window)
+    }
+}
+
 private enum AppUISnapshotter {
     private static var didScheduleSnapshot = false
 
@@ -1760,8 +2143,10 @@ private enum AppUISnapshotter {
             throw SnapshotError.invalidContentBounds
         }
 
-        context.setFillColor(NSColor.white.cgColor)
-        context.fill(CGRect(origin: .zero, size: pixelSize))
+        window.effectiveAppearance.performAsCurrentDrawingAppearance {
+            context.setFillColor(NSColor.windowBackgroundColor.cgColor)
+            context.fill(CGRect(origin: .zero, size: pixelSize))
+        }
 
         guard let cachedImage = cachedRepresentation.cgImage else {
             throw SnapshotError.pngEncodingFailed
@@ -1858,6 +2243,8 @@ private struct AppCatalogView: View {
     let apps: [AppRecord]
     @Binding var selectedAppID: AppRecord.ID?
     @Binding var searchText: String
+    let showInfo: () -> Void
+    let validateRecipe: (AppRecord) -> Void
     let updateApp: (AppRecord) async -> Void
     let editSelfUpdateURL: (AppRecord) -> Void
     let ignoreUpdates: (AppRecord) -> Void
@@ -1878,13 +2265,15 @@ private struct AppCatalogView: View {
             apps: filteredApps,
             selectedAppID: $selectedAppID,
             searchText: $searchText,
-            topInset: AppLayout.tableTopInset,
+            topInset: 0,
+            showInfo: showInfo,
+            validateRecipe: validateRecipe,
             updateApp: updateApp,
             editSelfUpdateURL: editSelfUpdateURL,
             ignoreUpdates: ignoreUpdates
         )
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color.white)
+        .background(Color(nsColor: .controlBackgroundColor))
     }
 }
 
@@ -1893,6 +2282,8 @@ private struct AppCatalogTableView: NSViewRepresentable {
     @Binding var selectedAppID: AppRecord.ID?
     @Binding var searchText: String
     let topInset: CGFloat
+    let showInfo: () -> Void
+    let validateRecipe: (AppRecord) -> Void
     let updateApp: (AppRecord) async -> Void
     let editSelfUpdateURL: (AppRecord) -> Void
     let ignoreUpdates: (AppRecord) -> Void
@@ -1900,6 +2291,8 @@ private struct AppCatalogTableView: NSViewRepresentable {
     func makeCoordinator() -> Coordinator {
         Coordinator(
             selectedAppID: $selectedAppID,
+            showInfo: showInfo,
+            validateRecipe: validateRecipe,
             updateApp: updateApp,
             editSelfUpdateURL: editSelfUpdateURL,
             ignoreUpdates: ignoreUpdates
@@ -1909,15 +2302,13 @@ private struct AppCatalogTableView: NSViewRepresentable {
     func makeNSView(context: Context) -> NSView {
         let containerView = AppTableContainerView()
         containerView.wantsLayer = true
-        containerView.appearance = NSAppearance(named: .aqua)
         containerView.layer?.backgroundColor = NSColor.clear.cgColor
         containerView.needsDisplay = true
 
-        let scrollView = NSScrollView()
+        let scrollView = AppTableScrollView()
         scrollView.translatesAutoresizingMaskIntoConstraints = false
-        scrollView.drawsBackground = false
-        scrollView.appearance = NSAppearance(named: .aqua)
-        scrollView.backgroundColor = .clear
+        scrollView.drawsBackground = true
+        scrollView.backgroundColor = NSColor.alternatingContentBackgroundColors[0]
         scrollView.hasVerticalScroller = true
         scrollView.hasHorizontalScroller = false
         scrollView.automaticallyAdjustsContentInsets = false
@@ -1926,19 +2317,20 @@ private struct AppCatalogTableView: NSViewRepresentable {
 
         let documentView = AppTableDocumentView()
         documentView.translatesAutoresizingMaskIntoConstraints = false
-        documentView.appearance = NSAppearance(named: .aqua)
 
         let tableView = AppCatalogNSTableView()
         tableView.headerView = nil
-        tableView.appearance = NSAppearance(named: .aqua)
-        tableView.backgroundColor = .clear
+        tableView.backgroundColor = NSColor.alternatingContentBackgroundColors[0]
         tableView.usesAlternatingRowBackgroundColors = false
         tableView.rowHeight = 24
         tableView.intercellSpacing = NSSize(width: 0, height: 0)
+        tableView.columnAutoresizingStyle = .noColumnAutoresizing
         tableView.selectionHighlightStyle = .regular
         tableView.allowsMultipleSelection = false
         tableView.dataSource = context.coordinator
         tableView.delegate = context.coordinator
+        tableView.target = context.coordinator
+        tableView.doubleAction = #selector(Coordinator.showSelectedAppInfo(_:))
         tableView.contextMenuProvider = { [weak coordinator = context.coordinator, weak tableView] row in
             guard let tableView else {
                 return nil
@@ -1966,6 +2358,9 @@ private struct AppCatalogTableView: NSViewRepresentable {
         context.coordinator.scrollView = scrollView
         context.coordinator.documentView = documentView
         context.coordinator.tableView = tableView
+        scrollView.layoutHandler = { [weak coordinator = context.coordinator] in
+            coordinator?.updateTableFrame()
+        }
         context.coordinator.apps = apps
         context.coordinator.updateTableFrame(topInset: topInset)
         return containerView
@@ -1980,6 +2375,8 @@ private struct AppCatalogTableView: NSViewRepresentable {
         scrollView.scrollerInsets = NSEdgeInsets(top: topInset, left: 0, bottom: 0, right: 0)
         context.coordinator.apps = apps
         context.coordinator.selectedAppID = $selectedAppID
+        context.coordinator.showInfo = showInfo
+        context.coordinator.validateRecipe = validateRecipe
         context.coordinator.updateApp = updateApp
         context.coordinator.editSelfUpdateURLHandler = editSelfUpdateURL
         context.coordinator.ignoreUpdates = ignoreUpdates
@@ -2008,6 +2405,8 @@ private struct AppCatalogTableView: NSViewRepresentable {
     final class Coordinator: NSObject, NSTableViewDataSource, NSTableViewDelegate {
         var apps: [AppRecord] = []
         var selectedAppID: Binding<AppRecord.ID?>
+        var showInfo: () -> Void
+        var validateRecipe: (AppRecord) -> Void
         var updateApp: (AppRecord) async -> Void
         var editSelfUpdateURLHandler: (AppRecord) -> Void
         var ignoreUpdates: (AppRecord) -> Void
@@ -2015,14 +2414,19 @@ private struct AppCatalogTableView: NSViewRepresentable {
         weak var documentView: AppTableDocumentView?
         weak var tableView: NSTableView?
         private var isSyncingSelection = false
+        private var topInset: CGFloat = 0
 
         init(
             selectedAppID: Binding<AppRecord.ID?>,
+            showInfo: @escaping () -> Void,
+            validateRecipe: @escaping (AppRecord) -> Void,
             updateApp: @escaping (AppRecord) async -> Void,
             editSelfUpdateURL: @escaping (AppRecord) -> Void,
             ignoreUpdates: @escaping (AppRecord) -> Void
         ) {
             self.selectedAppID = selectedAppID
+            self.showInfo = showInfo
+            self.validateRecipe = validateRecipe
             self.updateApp = updateApp
             self.editSelfUpdateURLHandler = editSelfUpdateURL
             self.ignoreUpdates = ignoreUpdates
@@ -2139,19 +2543,33 @@ private struct AppCatalogTableView: NSViewRepresentable {
             }
         }
 
-        func updateTableFrame(topInset: CGFloat) {
+        func updateTableFrame(topInset: CGFloat? = nil) {
             guard let tableView,
                   let documentView,
                   let scrollView else {
                 return
             }
 
-            let contentWidth = max(scrollView.contentView.bounds.width, tableView.tableColumns.reduce(0) { $0 + $1.width })
+            if let topInset {
+                self.topInset = topInset
+            }
+
+            let visibleWidth = scrollView.contentView.bounds.width
+            if let nameColumn = tableView.tableColumn(withIdentifier: NSUserInterfaceItemIdentifier("name")) {
+                nameColumn.width = AppTableColumnLayout.nameWidth(for: visibleWidth)
+            }
+
+            let contentWidth = max(visibleWidth, tableView.tableColumns.reduce(0) { $0 + $1.width })
             let rowsHeight = CGFloat(apps.count) * tableView.rowHeight
             let visibleHeight = scrollView.contentView.bounds.height
-            let documentHeight = max(visibleHeight, topInset + rowsHeight)
+            let documentHeight = max(visibleHeight, self.topInset + rowsHeight)
             documentView.frame = NSRect(x: 0, y: 0, width: contentWidth, height: documentHeight)
-            tableView.frame = NSRect(x: 0, y: topInset, width: contentWidth, height: max(rowsHeight, visibleHeight - topInset))
+            tableView.frame = NSRect(
+                x: 0,
+                y: self.topInset,
+                width: contentWidth,
+                height: max(rowsHeight, visibleHeight - self.topInset)
+            )
         }
 
         @objc private func ignoreSelectedApp(_ sender: NSMenuItem) {
@@ -2161,6 +2579,21 @@ private struct AppCatalogTableView: NSViewRepresentable {
             }
 
             ignoreUpdates(app)
+        }
+
+        @objc func showSelectedAppInfo(_ sender: NSTableView) {
+            let row = sender.clickedRow >= 0 ? sender.clickedRow : sender.selectedRow
+            guard apps.indices.contains(row) else {
+                return
+            }
+
+            selectedAppID.wrappedValue = apps[row].id
+            sender.selectRowIndexes(IndexSet(integer: row), byExtendingSelection: false)
+            if (sender as? AppCatalogNSTableView)?.lastDoubleClickModifierFlags.contains(.option) == true {
+                validateRecipe(apps[row])
+            } else {
+                showInfo()
+            }
         }
 
         @objc private func editSelfUpdateURL(_ sender: NSButton) {
@@ -2256,6 +2689,15 @@ private struct AppCatalogTableView: NSViewRepresentable {
     }
 }
 
+private final class AppTableScrollView: NSScrollView {
+    var layoutHandler: (() -> Void)?
+
+    override func layout() {
+        super.layout()
+        layoutHandler?()
+    }
+}
+
 private final class AppTableContainerView: NSView {
     override var isFlipped: Bool {
         true
@@ -2278,8 +2720,12 @@ private final class AppTableDocumentView: NSView {
             return
         }
 
-        let tableColumnsWidth = tableView.tableColumns.reduce(0) { $0 + $1.width }
         let visibleWidth = superview?.bounds.width ?? bounds.width
+        if let nameColumn = tableView.tableColumn(withIdentifier: NSUserInterfaceItemIdentifier("name")) {
+            nameColumn.width = AppTableColumnLayout.nameWidth(for: visibleWidth)
+        }
+
+        let tableColumnsWidth = tableView.tableColumns.reduce(0) { $0 + $1.width }
         let contentWidth = max(visibleWidth, tableColumnsWidth)
         if frame.width != contentWidth {
             frame.size.width = contentWidth
@@ -2293,6 +2739,14 @@ private final class AppTableDocumentView: NSView {
 
 private final class AppCatalogNSTableView: NSTableView {
     var contextMenuProvider: ((Int) -> NSMenu?)?
+    private(set) var lastDoubleClickModifierFlags: NSEvent.ModifierFlags = []
+
+    override func mouseDown(with event: NSEvent) {
+        if event.clickCount == 2 {
+            lastDoubleClickModifierFlags = event.modifierFlags
+        }
+        super.mouseDown(with: event)
+    }
 
     override func menu(for event: NSEvent) -> NSMenu? {
         let point = convert(event.locationInWindow, from: nil)
@@ -2315,7 +2769,7 @@ private final class PlainAppTableRowView: NSTableRowView {
 
     override func drawBackground(in dirtyRect: NSRect) {
         if !isSelected && isOddRow {
-            NSColor.controlBackgroundColor.withSystemEffect(.pressed).withAlphaComponent(0.35).setFill()
+            NSColor.alternatingContentBackgroundColors[1].setFill()
             dirtyRect.fill()
         }
     }
@@ -2383,7 +2837,7 @@ private final class AppNameCellView: NSTableCellView {
 private struct AppCatalogHeader: View {
     var body: some View {
         GeometryReader { proxy in
-            let nameWidth = AppTableColumnLayout.nameWidth(for: proxy.size.width)
+            let nameWidth = AppTableColumnLayout.nameWidth(for: proxy.size.width + AppTableColumnLayout.scrollerWidth)
             HStack(spacing: 0) {
                 Text("App 名称")
                     .frame(width: nameWidth - AppTableColumnLayout.nameLeadingPadding, alignment: .leading)

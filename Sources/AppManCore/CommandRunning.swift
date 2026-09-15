@@ -4,16 +4,37 @@ public protocol CommandRunning: Sendable {
     func run(_ executable: String, arguments: [String]) throws -> String
 }
 
-public enum CommandError: Error, Equatable {
+public enum CommandError: LocalizedError, Equatable {
     case executableNotFound(String)
     case failed(status: Int32, stderr: String)
+    case timedOut(String)
+
+    public var errorDescription: String? {
+        switch self {
+        case let .executableNotFound(executable):
+            return "找不到命令：\(executable)"
+        case let .failed(status, stderr):
+            let detail = stderr.trimmingCharacters(in: .whitespacesAndNewlines)
+            return detail.isEmpty ? "命令执行失败（退出码 \(status)）" : detail
+        case let .timedOut(executable):
+            return "命令执行超时：\(executable)"
+        }
+    }
 }
 
 public struct ProcessCommandRunner: CommandRunning {
     private let searchDirectories: [URL]
+    private let environment: [String: String]
+    private let timeout: TimeInterval?
 
-    public init(searchDirectories: [URL]? = nil) {
+    public init(
+        searchDirectories: [URL]? = nil,
+        environment: [String: String] = [:],
+        timeout: TimeInterval? = nil
+    ) {
         self.searchDirectories = searchDirectories ?? Self.defaultSearchDirectories
+        self.environment = environment
+        self.timeout = timeout
     }
 
     public func run(_ executable: String, arguments: [String]) throws -> String {
@@ -24,6 +45,9 @@ public struct ProcessCommandRunner: CommandRunning {
         let process = Process()
         process.executableURL = executableURL
         process.arguments = arguments
+        if !environment.isEmpty {
+            process.environment = ProcessInfo.processInfo.environment.merging(environment) { _, override in override }
+        }
 
         let stdoutPipe = Pipe()
         let stderrPipe = Pipe()
@@ -47,7 +71,18 @@ public struct ProcessCommandRunner: CommandRunning {
             readGroup.leave()
         }
 
-        process.waitUntilExit()
+        if let timeout {
+            let didExit = DispatchSemaphore(value: 0)
+            process.terminationHandler = { _ in didExit.signal() }
+            guard didExit.wait(timeout: .now() + timeout) == .success else {
+                process.terminate()
+                process.waitUntilExit()
+                readGroup.wait()
+                throw CommandError.timedOut(executable)
+            }
+        } else {
+            process.waitUntilExit()
+        }
         readGroup.wait()
 
         let stdout = String(data: stdoutData, encoding: .utf8) ?? ""
